@@ -19,7 +19,7 @@ import {
   FirestoreError,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "@/config/firebase";
+import { db, storage } from "@/config/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { generateStaffInviteCode } from "@/lib/generateInviteCode";
 import { deleteImage } from "@/lib/uploadImages";
@@ -508,7 +508,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const deletePatient = async (id: string) => {
     const patient = patients.find((p) => p.id === id);
     if (patient?.photo) {
-      await deleteImage(patient.photo); // Don't forget to pass the patient.photo variable argument when we migrate to Firebase Storage Blaze Plan.
+      await deleteImage(patient.photo, storage); // Don't forget to pass the patient.photo variable argument when we migrate to Firebase Storage Blaze Plan.
     }
     await deleteDoc(doc(db, "Hospitals", user!.uid, "patients", id));
     await createNotification(
@@ -577,7 +577,7 @@ const addStaffMember = async (id: string, member: Omit<StaffMember, "id">) => {
   const deleteStaffMember = async (id: string) => {
     const member = staffMembers.find((s) => s.id === id);
     if (member?.photo) {
-      await deleteImage(member.photo); // Don't forget to pass the member.photo variable argument when we migrate to Firebase Storage Blaze Plan.
+      await deleteImage(member.photo, storage); // Don't forget to pass the member.photo variable argument when we migrate to Firebase Storage Blaze Plan.
     }
     await deleteDoc(doc(db, "Hospitals", user!.uid, "staff", id));
     await createNotification(
