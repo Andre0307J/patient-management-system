@@ -20,6 +20,7 @@ import { usePatients, Patient } from "@/context/PatientContext";
 import { usePortal } from "@/context/PortalContext";
 import { uploadImage } from "@/lib/uploadImages";
 import { deleteImage } from "@/lib/uploadImages";
+import { storage } from "@/config/firebase";
 
 const steps = [
   { label: "Basic Info", icon: UserCircle },
@@ -144,7 +145,7 @@ export default function EditPatientForm({
 
       if (photoPreview && photoPreview !== patient.photo) {
         if (patient.photo) {
-          await deleteImage(patient.photo);
+          await deleteImage(patient.photo, storage);
         }
         if (portalUser) {
           const response = await fetch(photoPreview);
@@ -153,7 +154,7 @@ export default function EditPatientForm({
             type: blob.type,
           });
           const imagePath = `hospitals/${portalUser.hospitalId}/patients/${patient.id}/profile.jpg`;
-          photoURL = await uploadImage(file, imagePath);
+          photoURL = await uploadImage(file, imagePath, storage);
         }
       }
 
