@@ -1,0 +1,17 @@
+import PortalSignUpCard from "@/components/portal/PortalSignUpCard";
+import PortalHeader from "@/components/portal/PortalHeader";
+
+export default function PortalSignUpPage() {
+  return (
+    <main
+      className="min-h-screen flex flex-col bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: "url('/portal-bg-image.jpg')" }}
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-teal-900 via-teal-700 to-cyan-500 -z-10" />
+      <PortalHeader isSignUpPage />
+      <div className="flex-1 flex items-center justify-center px-4">
+        <PortalSignUpCard />
+      </div>
+    </main>
+  );
+}
