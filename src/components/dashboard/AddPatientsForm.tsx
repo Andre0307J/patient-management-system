@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { usePatients } from "@/context/PatientContext";
 import { uploadImage } from "@/lib/uploadImages";
 import { useAuth } from "@/hooks/useAuth";
+import { storage } from "@/config/firebase";
 
 const steps = [
   { label: "Basic Info", icon: UserCircle },
@@ -157,7 +158,7 @@ export default function AddPatientForm({
         const file = new File([blob], "patient-photo.jpg", { type: blob.type });
         photoURL = await uploadImage(
           file,
-          `hospitals/${user.uid}/patients/${Date.now()}-photo`,
+          `hospitals/${user.uid}/patients/${Date.now()}-photo`, storage
         );
       }
 

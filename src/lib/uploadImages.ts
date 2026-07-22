@@ -1,17 +1,21 @@
 // Firebase Storage (uncomment when Blaze plan is activated) ────────────
-import { storage } from "@/config/firebase";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+//import { storage } from "@/config/firebase";
+import { ref, uploadBytes, getDownloadURL, deleteObject, FirebaseStorage } from "firebase/storage";
 
-export async function uploadImage(file: File, path: string): Promise<string> {
-  const storageRef = ref(storage, path);
+export async function uploadImage(
+  file: File, 
+  path: string, 
+  storageInstance: FirebaseStorage
+): Promise<string> {
+  const storageRef = ref(storageInstance, path);
   await uploadBytes(storageRef, file);
   const downloadURL = await getDownloadURL(storageRef);
   return downloadURL;
 }
 
-export async function deleteImage(fileUrl: string): Promise<void> {
+export async function deleteImage(fileUrl: string, storageInstance: FirebaseStorage): Promise<void> {
   try {
-    const storageRef = ref(storage, fileUrl);
+    const storageRef = ref(storageInstance, fileUrl);
     await deleteObject(storageRef);
   } catch (error) {
     console.error("Error deleting image:", error);

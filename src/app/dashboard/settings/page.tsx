@@ -1,7 +1,7 @@
 "use client";
 
 import { signOut } from "firebase/auth";
-import { auth } from "@/config/firebase";
+import { auth, storage, db } from "@/config/firebase";
 import { useAuth } from "@/hooks/useAuth";
 
 import {
@@ -20,7 +20,6 @@ import {
   getDocs,
   QueryDocumentSnapshot,
 } from "firebase/firestore";
-import { db } from "@/config/firebase";
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
@@ -194,7 +193,7 @@ export default function SettingsPage() {
         const file = new File([blob], "avatar.jpg", { type: blob.type });
         photoURL = await uploadImage(
           file,
-          `hospitals/${user.uid}/avatar/profile-photo`,
+          `hospitals/${user.uid}/avatar/profile-photo`, storage
         );
       }
       await updateProfile(user, {

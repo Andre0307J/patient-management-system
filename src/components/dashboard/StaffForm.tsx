@@ -19,6 +19,7 @@ import { uploadImage } from "@/lib/uploadImages";
 
 import { toast } from "sonner";
 import { deleteImage } from "@/lib/uploadImages";
+import { storage } from "@/config/firebase";
 
 const doctorRoles = [
   "Doctor",
@@ -139,7 +140,7 @@ export default function StaffForm({
 
       if (photoPreview && photoPreview !== existing?.photo) {
         if (existing?.photo) {
-          await deleteImage(existing?.photo);
+          await deleteImage(existing?.photo, storage);
         }
         if (user?.uid) {
           const response = await fetch(photoPreview);
@@ -150,7 +151,7 @@ export default function StaffForm({
 
           // 2. Use the stable staffId for the path
           const imagePath = `hospitals/${user.uid}/staff/${staffId}/profile.jpg`;
-          photoURL = await uploadImage(file, imagePath);
+          photoURL = await uploadImage(file, imagePath, storage);
         }
       }
 

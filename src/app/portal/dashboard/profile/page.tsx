@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { updateDoc, doc } from "firebase/firestore";
-import { portalDb } from "@/config/firebase";
+import { portalDb, portalStorage } from "@/config/firebase";
 import { uploadImage } from "@/lib/uploadImages";
 
 const sections = [
@@ -87,6 +87,7 @@ export default function PortalProfilePage() {
         photoURL = await uploadImage(
           file,
           `hospitals/${portalUser.hospitalId}/portalUsers/${user.uid}/avatar`,
+          portalStorage,
         );
       }
       await updateProfile(user, {

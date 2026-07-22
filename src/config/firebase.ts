@@ -50,3 +50,4 @@ const getPortalAuth = () => {
 
 export const portalAuth = getPortalAuth();
 export const portalDb = getFirestore(portalApp);
+export const portalStorage = getStorage(portalApp);
