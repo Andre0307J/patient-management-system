@@ -4,10 +4,13 @@ import { useEffect } from "react";
 
 export default function VerifySuccessPage() {
   useEffect(() => {
-    // Try to close the tab instantly when this page mounts
-    window.close();
+    // 1. Broadcast to Tab 1 that email verification succeeded
+    const channel = new BroadcastChannel("auth_verification_channel");
+    channel.postMessage({ type: "EMAIL_VERIFIED" });
+    channel.close();
 
-    // Fallback: If browser security blocks window.close(), show a friendly manual closer button
+    // 2. Try to close the tab instantly when this page mounts
+    window.close();
   }, []);
 
   return (

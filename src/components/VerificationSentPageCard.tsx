@@ -11,6 +11,18 @@ export default function VerificationSentPageCard() {
   const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
+    // --- 1. BroadcastChannel Listener (Instant Cross-Tab Signal) ---
+    const channel = new BroadcastChannel("auth_verification_channel");
+
+    channel.onmessage = async (event) => {
+      if (event.data?.type === "EMAIL_VERIFIED") {
+        toast.success("Email verified successfully! Redirecting to login...");
+        await auth.signOut(); // Clear active state so they must log in manually
+        window.location.href = "/"; // Redirect immediately
+      }
+    };
+
+    // --- 2. Existing Auth Listener & Fallback Polling Loop ---
     let interval: NodeJS.Timeout;
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -46,6 +58,7 @@ export default function VerificationSentPageCard() {
     });
 
     return () => {
+      channel.close();
       unsubscribe();
       if (interval) clearInterval(interval);
     };
