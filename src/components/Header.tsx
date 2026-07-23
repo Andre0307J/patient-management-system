@@ -20,7 +20,7 @@ export default function Header({
             alt="PatientCare logo"
             width={40}
             height={40}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover text-white"
           />
         </div>
         <span className="text-white font-semibold text-xl tracking-wide">

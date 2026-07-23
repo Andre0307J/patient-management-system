@@ -4,6 +4,15 @@ import PortalAuthGuard from "@/components/PortalAuthGuard"; // Adjust path if pl
 export const metadata: Metadata = {
   title: "PatientCare Portal",
   description: "Doctor & Nurse Clinical Portal",
+  icons: {
+    icon: {
+      url: "/pms-image.png",
+      sizes: "any",
+      type: "image/png",
+    },
+    shortcut: "/pms-image.png",
+    apple: "/pms-image.png",
+  },
 };
 
 export default function PortalLayout({

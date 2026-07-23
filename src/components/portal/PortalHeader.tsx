@@ -1,15 +1,24 @@
 import Link from "next/link";
+import Image from "next/image";
 
 interface PortalHeaderProps {
   isSignUpPage?: boolean;
 }
 
-export default function PortalHeader({ isSignUpPage = false }: PortalHeaderProps) {
+export default function PortalHeader({
+  isSignUpPage = false,
+}: PortalHeaderProps) {
   return (
     <header className="w-full px-8 py-4 flex items-center justify-between bg-transparent">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center">
-          <span className="text-white font-bold text-lg">P</span>
+          <Image
+            src="/pms-image.png"
+            alt="PatientCare logo"
+            width={40}
+            height={40}
+            className="w-full h-full object-cover text-white"
+          />
         </div>
         <div>
           <span className="text-white font-semibold text-xl tracking-wide">
