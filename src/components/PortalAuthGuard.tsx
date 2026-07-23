@@ -68,12 +68,24 @@ export default function PortalAuthGuard({
   }, [pathname]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-900 via-teal-700 to-cyan-500">
-        <Loader2 size={32} className="animate-spin text-white" />
+  return (
+    // Replace the URL with the exact path to your background image
+    // and match the same background classes (bg-cover, bg-center, etc.) you used on the Auth pages
+    <div 
+      className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: "url('/portal-bg-image.jpg')" }} 
+    >
+      {/* Optional: Add a subtle overlay if your auth pages have one (e.g., bg-black/40) */}
+      <div className="absolute inset-0 bg-black/30" /> 
+      
+      {/* The spinner stays on top, matching the style of your cards */}
+      <div className="relative z-10 flex flex-col items-center justify-center bg-white/10 backdrop-blur-md p-6 rounded-2xl shadow-xl">
+        <Loader2 size={32} className="animate-spin text-white mb-4" />
+        <p className="text-white font-medium">Securing session...</p>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // Guard render checks
   if (!user && !isPublicRoute) return null;
