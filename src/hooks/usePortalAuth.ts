@@ -10,16 +10,18 @@ export function usePortalAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const isEvaluating = useRef(false);
+  const hasResolvedOnce = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(portalAuth, async (portalUser) => {
-      // Prevent double-running async Firestore checks if one is already in flight
+      // Avoid overlapping async Firestore calls
       if (isEvaluating.current) return;
       isEvaluating.current = true;
 
       if (!portalUser) {
         setUser(null);
         setLoading(false);
+        hasResolvedOnce.current = true;
         isEvaluating.current = false;
         return;
       }
@@ -44,6 +46,7 @@ export function usePortalAuth() {
           if (isPublicPath) {
             setUser(portalUser);
             setLoading(false);
+            hasResolvedOnce.current = true;
             isEvaluating.current = false;
             return;
           }
@@ -64,6 +67,7 @@ export function usePortalAuth() {
         setUser(null);
       } finally {
         setLoading(false);
+        hasResolvedOnce.current = true;
         isEvaluating.current = false;
       }
     });

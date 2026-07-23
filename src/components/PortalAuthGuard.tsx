@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { usePortalAuth } from "@/hooks/usePortalAuth";
 import { Loader2 } from "lucide-react";
+
+// Helper to check if we are on the client/browser cleanly without useState in useEffect
+const emptySubscribe = () => () => {};
+function useIsClient() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,  // Client value
+    () => false  // Server/SSR value
+  );
+}
 
 export default function PortalAuthGuard({
   children,
@@ -14,6 +24,7 @@ export default function PortalAuthGuard({
   const router = useRouter();
   const pathname = usePathname();
   const isRedirecting = useRef(false);
+  const isClient = useIsClient();
 
   const publicRoutes = [
     "/portal",
@@ -34,7 +45,7 @@ export default function PortalAuthGuard({
     pathname === "/portal/forgot-password";
 
   useEffect(() => {
-    if (loading) return;
+    if (!isClient || loading) return;
     if (isRedirecting.current) return;
 
     // 1. UNAUTHENTICATED USERS
@@ -60,32 +71,29 @@ export default function PortalAuthGuard({
       isRedirecting.current = true;
       router.replace("/portal/dashboard");
     }
-  }, [user, loading, router, pathname, isPublicRoute, isVerificationPage, isAuthPage]);
+  }, [user, loading, isClient, router, pathname, isPublicRoute, isVerificationPage, isAuthPage]);
 
   // Reset redirect lock when pathname changes
   useEffect(() => {
     isRedirecting.current = false;
   }, [pathname]);
 
-  if (loading) {
-  return (
-    // Replace the URL with the exact path to your background image
-    // and match the same background classes (bg-cover, bg-center, etc.) you used on the Auth pages
-    <div 
-      className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: "url('/portal-bg-image.jpg')" }} 
-    >
-      {/* Optional: Add a subtle overlay if your auth pages have one (e.g., bg-black/40) */}
-      <div className="absolute inset-0 bg-black/30" /> 
-      
-      {/* The spinner stays on top, matching the style of your cards */}
-      <div className="relative z-10 flex flex-col items-center justify-center bg-white/10 backdrop-blur-md p-6 rounded-2xl shadow-xl">
-        <Loader2 size={32} className="animate-spin text-white mb-4" />
-        <p className="text-white font-medium">Securing session...</p>
+  // Show loading UI while SSR hydrating OR while Firebase is checking auth
+  if (!isClient || loading) {
+    return (
+      <div 
+        className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat relative"
+        style={{ backgroundImage: "url('/portal-bg-image.jpg')" }} 
+      >
+        <div className="absolute inset-0 bg-black/30" /> 
+        
+        <div className="relative z-10 flex flex-col items-center justify-center bg-white/10 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-white/20">
+          <Loader2 size={32} className="animate-spin text-white mb-4" />
+          <p className="text-white font-medium">Securing session...</p>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   // Guard render checks
   if (!user && !isPublicRoute) return null;
