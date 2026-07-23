@@ -13,6 +13,15 @@ export const metadata: Metadata = {
   title: "Patient Care Management System",
   description:
     "Patient management System built with Next.js, Prisma, and Tailwind CSS for healthcare providers to manage patient records, appointments, and treatments efficiently.",
+  icons: {
+    icon: {
+      url: "/pms-image.png",
+      sizes: "any",
+      type: "image/png",
+    },
+    shortcut: "/pms-image.png",
+    apple: "/pms-image.png",
+  },
 };
 
 export default function RootLayout({

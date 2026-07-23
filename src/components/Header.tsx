@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 interface HeaderProps {
@@ -13,8 +14,14 @@ export default function Header({
     <header className="w-full px-8 py-4 flex items-center justify-between bg-transparent">
       {/* Logo + App Name */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center">
-          <span className="text-white font-bold text-lg">P</span>
+        <div className="w-10 h-10 rounded-full bg-white/20 border-2 border-white/40 overflow-hidden flex items-center justify-center">
+          <Image
+            src="/pms-image.png"
+            alt="PatientCare logo"
+            width={40}
+            height={40}
+            className="w-full h-full object-cover"
+          />
         </div>
         <span className="text-white font-semibold text-xl tracking-wide">
           PatientCare
