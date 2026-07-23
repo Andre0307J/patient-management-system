@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { portalAuth as auth, portalDb } from "@/config/firebase";
 import {
   createUserWithEmailAndPassword,
@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface FirebaseError {
   code: string;
@@ -39,6 +40,12 @@ export default function PortalSignUpCard() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const router = useRouter();
+
+  //PREFETCH ROUTE: Loads verification page assets in the background on mount
+  useEffect(() => {
+    router.prefetch("/portal/verification-sent");
+  }, [router]);
 
   const validateEmail = (emailStr: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr);
@@ -158,7 +165,7 @@ export default function PortalSignUpCard() {
         });
 
         // Step 5 — Redirect directly to the verification sent page, maintaining the active session
-        window.location.href = "/portal/verification-sent";
+        router.push("/portal/verification-sent");
       } catch (transactionError: unknown) {
         // Rollback Auth registration if database constraints fail
         await user.delete();
