@@ -18,8 +18,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { usePatients, Patient } from "@/context/PatientContext";
 import { usePortal } from "@/context/PortalContext";
-import { uploadImage } from "@/lib/uploadImages";
-import { deleteImage } from "@/lib/uploadImages";
+import { uploadImage, deleteImage } from "@/lib/uploadImages";
 import { storage } from "@/config/firebase";
 
 const steps = [
@@ -77,6 +76,7 @@ export default function EditPatientForm({
   const [assignedDoctor, setAssignedDoctor] = useState(patient.assignedDoctor);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
@@ -113,11 +113,15 @@ export default function EditPatientForm({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
-    if (validateStep(currentStep)) setCurrentStep((prev) => prev + 1);
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (validateStep(currentStep)) {
+      setCurrentStep((prev) => prev + 1);
+    }
   };
 
-  const handleBack = () => {
+  const handleBack = (e: React.MouseEvent) => {
+    e.preventDefault();
     setErrors({});
     setCurrentStep((prev) => prev - 1);
   };
@@ -127,7 +131,6 @@ export default function EditPatientForm({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Clean up the memory allocated for the previous preview URL
     if (photoPreview?.startsWith("blob:")) {
       URL.revokeObjectURL(photoPreview);
     }
@@ -138,7 +141,15 @@ export default function EditPatientForm({
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // GUARD: Ensure form can ONLY be submitted on the final step
+    if (currentStep !== steps.length - 1) {
+      return;
+    }
+
     if (!validateStep(2)) return;
+
+    setIsSubmitting(true);
 
     try {
       let photoURL: string | null = patient.photo;
@@ -195,6 +206,8 @@ export default function EditPatientForm({
         description: "Please check your connection and try again.",
       });
       console.error("Update patient error:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -642,7 +655,9 @@ export default function EditPatientForm({
               Next
             </Button>
           ) : (
-            <Button type="submit">Save Changes</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Saving..." : "Save Changes"}
+            </Button>
           )}
         </div>
       </form>
