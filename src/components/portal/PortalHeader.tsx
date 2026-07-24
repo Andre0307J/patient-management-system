@@ -13,7 +13,7 @@ export default function PortalHeader({
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center">
           <Image
-            src="/pms-image.png"
+            src="/pms-logo.png"
             alt="PatientCare logo"
             width={40}
             height={40}
