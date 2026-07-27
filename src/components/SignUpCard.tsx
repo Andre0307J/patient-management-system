@@ -143,7 +143,7 @@ export default function SignUpCard() {
       }
 
       // Redirect to verification pending page
-      window.location.href = "/verification-sent";
+      window.location.href = "/admin/verification-sent";
     } catch (error: unknown) {
       const firebaseError = error as { code: string; message?: string };
       const errorMessage = getFirebaseErrorMessage(firebaseError);

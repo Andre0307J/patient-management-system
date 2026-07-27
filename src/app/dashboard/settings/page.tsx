@@ -320,7 +320,7 @@ export default function SettingsPage() {
       });
 
       // 👇 Swapped out router.replace to handle absolute data destruction safely
-      window.location.href = "/signup";
+      window.location.href = "/admin/signup";
     } catch (error: unknown) {
       const firebaseError = error as { code: string };
       if (firebaseError.code === "auth/requires-recent-login") {
@@ -346,7 +346,7 @@ export default function SettingsPage() {
       toast.success("Signed out successfully.");
       
       // 👇 Swapped out router.replace to drop secure context smoothly
-      window.location.href = "/";
+      window.location.href = "/admin";
     } catch (error) {
       toast.error("Failed to sign out. Please try again.");
       console.error("Sign out error:", error);

@@ -32,14 +32,14 @@ export default function Header({
       <nav>
         {isSignUpPage || isVerificationSentPage ? (
           <Link
-            href="/"
+            href="/admin"
             className="text-white text-sm font-medium border border-white/40 px-4 py-2 rounded-full hover:bg-white/20 transition"
           >
             Login
           </Link>
         ) : (
           <Link
-            href="/signup"
+            href="/admin/signup"
             className="text-white text-sm font-medium border border-white/40 px-4 py-2 rounded-full hover:bg-white/20 transition"
           >
             Sign Up

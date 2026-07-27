@@ -142,7 +142,7 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
       toast.success("Signed out successfully.");
       
       // 👇 Swapped out router.replace to guarantee a complete cleanup on sign out
-      window.location.href = "/";
+      window.location.href = "/admin";
       
     } catch (error) {
       toast.error("Failed to sign out. Please try again.");

@@ -49,7 +49,7 @@ export default function VerificationSentPageCard() {
             clearInterval(interval);
             toast.success("Email verified successfully! Please log in.");
             await auth.signOut(); // Clear active session on Tab 1
-            window.location.href = "/"; // Force Tab 1 to redirect to the login page
+            window.location.href = "/admin"; // Force Tab 1 to redirect to the login page
           }
         } catch (error) {
           console.error("Error checking verification status:", error);

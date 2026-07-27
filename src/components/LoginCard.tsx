@@ -122,7 +122,7 @@ export default function LoginCard() {
           </div>
           <div className="flex justify-end">
             <a
-              href="/forgot-password"
+              href="/admin/forgot-password"
               className="text-xs text-blue-600 hover:underline"
             >
               Forgot Password?

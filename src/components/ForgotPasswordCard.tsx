@@ -37,7 +37,7 @@ export default function ForgotPasswordCard() {
         localStorage.removeItem("passwordReset");
         toast.success("Password reset successfully! Please sign in.");
         //router.replace("/");
-        window.location.href = "/";
+        window.location.href = "/admin";
       }
     };
 
@@ -117,7 +117,7 @@ export default function ForgotPasswordCard() {
             </button>
           </p>
           <Link
-            href="/"
+            href="/admin"
             className="flex items-center justify-center gap-2 text-sm text-blue-600 hover:underline mt-4"
           >
             <ArrowLeft size={14} /> Back to Sign In
@@ -157,7 +157,7 @@ export default function ForgotPasswordCard() {
           </Button>
 
           <Link
-            href="/"
+            href="/admin"
             className="flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-gray-700"
           >
             <ArrowLeft size={14} /> Back to Sign In

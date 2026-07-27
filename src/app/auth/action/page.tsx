@@ -27,7 +27,7 @@ function AuthActionContent() {
     if (!mode || !oobCode) {
       toast.error("Invalid link.");
       // 👇 Hard reload out of the broken authentication process to avoid router hanging
-      window.location.href = "/";
+      window.location.href = "/admin";
       return;
     }
 
