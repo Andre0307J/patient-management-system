@@ -34,7 +34,29 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
   const [paymentMethod, setPaymentMethod] = useState<Invoice["paymentMethod"]>(
     existing?.paymentMethod ?? "cash",
   );
+  const [balance, setBalance] = useState(existing?.balance?.toString() ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Balance field is only active when status is partially_paid
+  const isPartiallyPaid = paymentStatus === "partially_paid";
+
+  // Auto-change status to "Paid" when balance reaches 0
+  const handleBalanceChange = (val: string) => {
+    setBalance(val);
+
+    const balanceNum = Number(val);
+    const amountNum = Number(amount);
+
+    if (val.trim() !== "" && balanceNum === 0) {
+      // Balance fully cleared — mark as paid
+      setPaymentStatus("paid");
+      setBalance("");
+      toast.info("Balance cleared — status updated to Paid.");
+    } else if (val.trim() !== "" && amountNum > 0 && balanceNum >= amountNum) {
+      // Balance equals or exceeds total — means nothing has been paid yet
+      // Keep as partially_paid, no auto-change
+    }
+  };
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -43,6 +65,17 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0)
       newErrors.amount = "Please enter a valid amount.";
     if (!date) newErrors.date = "Date is required.";
+
+    // Validate balance when partially paid
+    if (paymentStatus === "partially_paid") {
+      if (!balance || isNaN(Number(balance)))
+        newErrors.balance = "Please enter a valid balance.";
+      if (Number(balance) > Number(amount))
+        newErrors.balance = "Balance cannot exceed the total amount.";
+      if (Number(balance) < 0)
+        newErrors.balance = "Balance cannot be negative.";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -53,53 +86,56 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!validate()) return;
+    e.preventDefault();
+    if (!validate()) return;
 
-  const selectedPatient = patients.find((p) => p.id === patientId);
-  if (!selectedPatient) return;
+    const selectedPatient = patients.find((p) => p.id === patientId);
+    if (!selectedPatient) return;
 
-  try {
-    if (existing) {
-      await updateInvoice({
-        ...existing,
-        patientId,
-        patientName: selectedPatient.fullName,
-        service,
-        amount: Number(amount),
-        date,
-        paymentStatus,
-        paymentMethod,
+    try {
+      if (existing) {
+        await updateInvoice({
+          ...existing,
+          patientId,
+          patientName: selectedPatient.fullName,
+          service,
+          amount: Number(amount),
+          date,
+          paymentStatus,
+          paymentMethod,
+          balance: paymentStatus === "partially_paid" ? Number(balance) : 0,
+        });
+        toast.success("Invoice updated.", {
+          description: `Invoice ${existing.invoiceNumber} has been updated.`,
+        });
+      } else {
+        await addInvoice({
+          invoiceNumber: generateInvoiceNumber(),
+          patientId,
+          patientName: selectedPatient.fullName,
+          service,
+          amount: Number(amount),
+          date,
+          paymentStatus,
+          paymentMethod,
+          balance: paymentStatus === "partially_paid" ? Number(balance) : 0,
+        });
+        toast.success("Invoice created.", {
+          description: `New invoice for ${selectedPatient.fullName} has been created.`,
+        });
+      }
+      onSuccess();
+    } catch (error) {
+      toast.error("Failed to save invoice.", {
+        description: "Please check your connection and try again.",
       });
-      toast.success("Invoice updated.", {
-        description: `Invoice ${existing.invoiceNumber} has been updated.`,
-      });
-    } else {
-      await addInvoice({
-        invoiceNumber: generateInvoiceNumber(),
-        patientId,
-        patientName: selectedPatient.fullName,
-        service,
-        amount: Number(amount),
-        date,
-        paymentStatus,
-        paymentMethod,
-      });
-      toast.success("Invoice created.", {
-        description: `New invoice for ${selectedPatient.fullName} has been created.`,
-      });
+      console.error("Invoice form error:", error);
     }
-    onSuccess();
-  } catch (error) {
-    toast.error("Failed to save invoice.", {
-      description: "Please check your connection and try again.",
-    });
-    console.error("Invoice form error:", error);
-  }
-};
+  };
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      {/* Patient */}
       <div className="space-y-1">
         <Label>Patient</Label>
         <Select
@@ -131,6 +167,7 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
         )}
       </div>
 
+      {/* Service */}
       <div className="space-y-1">
         <Label>Service / Treatment Description</Label>
         <Input
@@ -147,6 +184,7 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
         )}
       </div>
 
+      {/* Amount + Date */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <Label>Amount ({code})</Label>
@@ -158,6 +196,10 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
               setAmount(e.target.value);
               if (Number(e.target.value) > 0)
                 setErrors((p) => ({ ...p, amount: undefined! }));
+              // If partially paid, update balance to match new amount
+              if (paymentStatus === "partially_paid" && balance === amount) {
+                setBalance(e.target.value);
+              }
             }}
           />
           {errors.amount && (
@@ -179,14 +221,26 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
         </div>
       </div>
 
+      {/* Payment Status + Method */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <Label>Payment Status</Label>
           <Select
-            defaultValue={paymentStatus}
-            onValueChange={(val) =>
-              setPaymentStatus(val as Invoice["paymentStatus"])
-            }
+            value={paymentStatus}
+            onValueChange={(val) => {
+              const newStatus = val as Invoice["paymentStatus"];
+              setPaymentStatus(newStatus);
+
+              if (newStatus === "partially_paid") {
+                // Pre-fill balance with full amount if not already set
+                if (!balance && amount) {
+                  setBalance(amount);
+                }
+              } else {
+                // Clear balance when switching away from partially_paid
+                setBalance("");
+              }
+            }}
           >
             <SelectTrigger>
               <SelectValue />
@@ -216,6 +270,46 @@ export default function InvoiceForm({ existing, onSuccess }: InvoiceFormProps) {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      {/* Balance — only active when Partially Paid */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <Label
+            className={
+              isPartiallyPaid ? "text-foreground" : "text-muted-foreground"
+            }
+          >
+            Balance Remaining ({code})
+          </Label>
+          {isPartiallyPaid && (
+            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+              Set to 0 to mark as fully paid
+            </span>
+          )}
+        </div>
+        <Input
+          type="number"
+          placeholder="0.00"
+          value={balance}
+          disabled={!isPartiallyPaid}
+          onChange={(e) => handleBalanceChange(e.target.value)}
+          className={
+            !isPartiallyPaid
+              ? "bg-muted text-muted-foreground cursor-not-allowed"
+              : errors.balance
+                ? "border-red-400"
+                : "border-amber-400 focus-visible:ring-amber-400"
+          }
+        />
+        {!isPartiallyPaid && (
+          <p className="text-xs text-muted-foreground">
+            Activates when payment status is set to &quot;Partially Paid&quot;.
+          </p>
+        )}
+        {errors.balance && (
+          <p className="text-red-500 text-xs">{errors.balance}</p>
+        )}
       </div>
 
       <Button type="submit" className="w-full">

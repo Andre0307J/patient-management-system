@@ -18,14 +18,18 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { usePatients } from "@/context/PatientContext";
 import { uploadImage } from "@/lib/uploadImages";
-import { useAuth } from "@/hooks/useAuth";
 import { storage } from "@/config/firebase";
+import { useHospital } from "@/context/HospitalContext";
 
 const steps = [
   { label: "Basic Info", icon: UserCircle },
   { label: "Emergency Contact", icon: ContactRound },
   { label: "Insurance & Admin", icon: ShieldPlus },
 ];
+
+// Generate a random 8-digit card number
+const generateCardNumber = () =>
+  Math.floor(10000000 + Math.random() * 90000000).toString();
 
 export default function AddPatientForm({
   onSuccess,
@@ -35,27 +39,29 @@ export default function AddPatientForm({
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { user } = useAuth();
-
-  // Temporary in-memory store to check for duplicates
+  const { hospitalId } = useHospital();
   const { patients, addPatient } = usePatients();
 
   // Step 1
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(""); // optional
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
-  const [zip, setZip] = useState("");
+
+  // Card number replaces ZIP — auto-generated, read-only
+  const [cardNumber] = useState(() => generateCardNumber());
+
   const [nationality, setNationality] = useState("");
   const [bloodType, setBloodType] = useState("");
   const [allergies, setAllergies] = useState("");
   const [medications, setMedications] = useState("");
   const [conditions, setConditions] = useState("");
+  const [patientHistory, setPatientHistory] = useState(""); // new
   const [observations, setObservations] = useState("");
 
   // Step 2
@@ -71,22 +77,27 @@ export default function AddPatientForm({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const validateEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+  const validateEmail = (val: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
   const validateStep = (step: number) => {
     const newErrors: Record<string, string> = {};
 
     if (step === 0) {
       if (!fullName.trim()) newErrors.fullName = "Full name is required.";
-      if (!validateEmail(email))
+
+      // Email is optional — only validate format if something was entered
+      if (email.trim() && !validateEmail(email)) {
         newErrors.email = "Please enter a valid email.";
+      }
+
       if (!phone.trim()) newErrors.phone = "Phone number is required.";
       if (!dob) newErrors.dob = "Date of birth is required.";
       if (!gender) newErrors.gender = "Please select a gender.";
       if (!address.trim()) newErrors.address = "Address is required.";
       if (!city.trim()) newErrors.city = "City is required.";
       if (!state.trim()) newErrors.state = "State is required.";
-      if (!zip.trim()) newErrors.zip = "ZIP code is required.";
+      // Card number is auto-generated — no validation needed
     }
 
     if (step === 1) {
@@ -115,20 +126,13 @@ export default function AddPatientForm({
     setCurrentStep((prev) => prev - 1);
   };
 
-  // Handle photo upload and preview
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Clean up the memory allocated for the previous preview URL
-    if (photoPreview?.startsWith("blob:")) {
-      URL.revokeObjectURL(photoPreview);
-    }
-
+    if (photoPreview?.startsWith("blob:")) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(URL.createObjectURL(file));
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateStep(2)) return;
@@ -136,15 +140,18 @@ export default function AddPatientForm({
     setIsLoading(true);
 
     try {
-      // Check for duplicates
-      const isDuplicate = patients.some(
-        (p) => p.email === email.toLowerCase() || p.phone === phone,
-      );
+      // Duplicate check — phone always checked, email only if provided
+      const isDuplicate = patients.some((p) => {
+        const phoneMatch = p.phone === phone;
+        const emailMatch =
+          email.trim() !== "" && p.email === email.toLowerCase();
+        return phoneMatch || emailMatch;
+      });
 
       if (isDuplicate) {
         toast.error("Patient record already exists.", {
           description:
-            "A record with this email or phone number is already in the system.",
+            "A record with this phone number or email is already in the system.",
         });
         setIsLoading(false);
         return;
@@ -152,32 +159,36 @@ export default function AddPatientForm({
 
       // Upload photo to Firebase Storage if one was selected
       let photoURL: string | null = null;
-      if (photoPreview && user) {
+      if (photoPreview && hospitalId) {
         const response = await fetch(photoPreview);
         const blob = await response.blob();
-        const file = new File([blob], "patient-photo.jpg", { type: blob.type });
+        const file = new File([blob], "patient-photo.jpg", {
+          type: blob.type,
+        });
         photoURL = await uploadImage(
           file,
-          `hospitals/${user.uid}/patients/${Date.now()}-photo`, storage
+          `hospitals/${hospitalId}/patients/${Date.now()}-photo`,
+          storage,
         );
       }
 
       const newPatient = {
         photo: photoURL,
         fullName,
-        email: email.toLowerCase(),
+        email: email.trim() ? email.toLowerCase() : "",
         phone,
         dob,
         gender,
         address,
         city,
         state,
-        zip,
+        cardNumber, // replaces zip
         nationality,
         bloodType,
         allergies,
         medications,
         conditions,
+        patientHistory, // new field
         emergencyName,
         emergencyPhone,
         emergencyRelationship,
@@ -204,6 +215,7 @@ export default function AddPatientForm({
       setIsLoading(false);
     }
   };
+
   return (
     <div className="space-y-5">
       {/* Step Indicator */}
@@ -254,7 +266,7 @@ export default function AddPatientForm({
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
-        {/* Step 1 — Basic Info */}
+        {/* ── Step 1 — Basic Info ─────────────────────────────────────── */}
         {currentStep === 0 && (
           <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
             {/* Photo Upload */}
@@ -266,6 +278,7 @@ export default function AddPatientForm({
                     alt="Preview"
                     fill
                     className="object-cover"
+                    unoptimized
                   />
                 ) : (
                   <UserCircle size={52} className="text-gray-300" />
@@ -283,6 +296,7 @@ export default function AddPatientForm({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Full Name */}
               <div className="col-span-2 space-y-1">
                 <Label>Full Name</Label>
                 <Input
@@ -298,15 +312,20 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.fullName}</p>
                 )}
               </div>
+
+              {/* Email — optional */}
               <div className="space-y-1">
-                <Label>Email</Label>
+                <Label>
+                  Email{" "}
+                  <span className="text-gray-400 text-xs">(optional)</span>
+                </Label>
                 <Input
                   type="text"
                   placeholder="patient@example.com"
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
-                    if (validateEmail(e.target.value))
+                    if (!e.target.value.trim() || validateEmail(e.target.value))
                       setErrors((p) => ({ ...p, email: undefined! }));
                   }}
                 />
@@ -314,6 +333,8 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.email}</p>
                 )}
               </div>
+
+              {/* Phone */}
               <div className="space-y-1">
                 <Label>Phone</Label>
                 <Input
@@ -329,6 +350,8 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.phone}</p>
                 )}
               </div>
+
+              {/* Date of Birth */}
               <div className="space-y-1">
                 <Label>Date of Birth</Label>
                 <Input
@@ -344,6 +367,8 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.dob}</p>
                 )}
               </div>
+
+              {/* Gender */}
               <div className="space-y-1">
                 <Label>Gender</Label>
                 <Select
@@ -365,6 +390,8 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.gender}</p>
                 )}
               </div>
+
+              {/* Street Address */}
               <div className="col-span-2 space-y-1">
                 <Label>Street Address</Label>
                 <Input
@@ -380,6 +407,8 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.address}</p>
                 )}
               </div>
+
+              {/* City */}
               <div className="space-y-1">
                 <Label>City</Label>
                 <Input
@@ -395,6 +424,8 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.city}</p>
                 )}
               </div>
+
+              {/* State */}
               <div className="space-y-1">
                 <Label>State</Label>
                 <Input
@@ -410,21 +441,21 @@ export default function AddPatientForm({
                   <p className="text-red-500 text-xs">{errors.state}</p>
                 )}
               </div>
+
+              {/* Card Number — auto-generated, read-only */}
               <div className="space-y-1">
-                <Label>ZIP Code</Label>
+                <Label>
+                  Card Number{" "}
+                  <span className="text-gray-400 text-xs">(auto-generated)</span>
+                </Label>
                 <Input
-                  placeholder="10001"
-                  value={zip}
-                  onChange={(e) => {
-                    setZip(e.target.value);
-                    if (e.target.value.trim())
-                      setErrors((p) => ({ ...p, zip: undefined! }));
-                  }}
+                  value={cardNumber}
+                  readOnly
+                  className="bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed font-mono tracking-widest"
                 />
-                {errors.zip && (
-                  <p className="text-red-500 text-xs">{errors.zip}</p>
-                )}
               </div>
+
+              {/* Nationality */}
               <div className="space-y-1">
                 <Label>Nationality</Label>
                 <Input
@@ -433,6 +464,8 @@ export default function AddPatientForm({
                   onChange={(e) => setNationality(e.target.value)}
                 />
               </div>
+
+              {/* Blood Type */}
               <div className="space-y-1">
                 <Label>Blood Type</Label>
                 <Select onValueChange={setBloodType}>
@@ -450,6 +483,8 @@ export default function AddPatientForm({
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Allergies */}
               <div className="col-span-2 space-y-1">
                 <Label>
                   Allergies{" "}
@@ -461,6 +496,8 @@ export default function AddPatientForm({
                   onChange={(e) => setAllergies(e.target.value)}
                 />
               </div>
+
+              {/* Current Medications */}
               <div className="col-span-2 space-y-1">
                 <Label>
                   Current Medications{" "}
@@ -472,6 +509,8 @@ export default function AddPatientForm({
                   onChange={(e) => setMedications(e.target.value)}
                 />
               </div>
+
+              {/* Pre-existing Conditions */}
               <div className="col-span-2 space-y-1">
                 <Label>
                   Pre-existing Conditions{" "}
@@ -483,6 +522,23 @@ export default function AddPatientForm({
                   onChange={(e) => setConditions(e.target.value)}
                 />
               </div>
+
+              {/* Patient History — new */}
+              <div className="col-span-2 space-y-1">
+                <Label>
+                  Patient&apos;s History{" "}
+                  <span className="text-gray-400 text-xs">(optional)</span>
+                </Label>
+                <textarea
+                  placeholder="e.g. Patient had surgery in 2018, history of high blood pressure since 2015..."
+                  value={patientHistory}
+                  onChange={(e) => setPatientHistory(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Observations */}
               <div className="col-span-2 space-y-1">
                 <Label>
                   Observations{" "}
@@ -493,14 +549,14 @@ export default function AddPatientForm({
                   value={observations}
                   onChange={(e) => setObservations(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
             </div>
           </div>
         )}
 
-        {/* Step 2 — Emergency Contact */}
+        {/* ── Step 2 — Emergency Contact ──────────────────────────────── */}
         {currentStep === 1 && (
           <div className="space-y-4">
             <div className="space-y-1">
@@ -572,7 +628,7 @@ export default function AddPatientForm({
           </div>
         )}
 
-        {/* Step 3 — Insurance & Admin */}
+        {/* ── Step 3 — Insurance & Admin ──────────────────────────────── */}
         {currentStep === 2 && (
           <div className="space-y-4">
             <div className="space-y-1">
@@ -648,7 +704,7 @@ export default function AddPatientForm({
           ) : (
             <Button
               type="submit"
-              className="cursor-pointer hover:bg-[#7bf500] disabled:cursor-not-allowed disabled:opacity-70"
+              className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isLoading}
             >
               {isLoading ? "Saving Patient..." : "Save Patient"}

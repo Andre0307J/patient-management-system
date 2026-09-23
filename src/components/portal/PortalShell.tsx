@@ -1,9 +1,9 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
+import { usePortalAuth } from "@/hooks/usePortalAuth";
 import { usePortal } from "@/context/PortalContext";
 import { signOut } from "firebase/auth";
-import { portalAuth as auth } from "@/config/firebase";
+import { portalAuth } from "@/config/firebase";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, LogOut, User } from "lucide-react";
@@ -21,16 +21,15 @@ export default function PortalShell({
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = useAuth();
-  const { portalUser, loading } = usePortal();
+  const { user } = usePortalAuth();
+  const { portalUser, loading, hospitalName, hospitalLogoURL } = usePortal();
   const router = useRouter();
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await signOut(portalAuth);
       toast.success("Signed out successfully.");
-      //router.replace("/portal");
-      window.location.href = "/portal";
+      router.replace("/portal");
     } catch (error) {
       toast.error("Failed to sign out.");
       console.error(error);
@@ -51,25 +50,43 @@ export default function PortalShell({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-background">
       {/* Top Bar */}
-      <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
+      <header className="h-16 bg-white dark:bg-card border-b border-gray-200 dark:border-border flex items-center justify-between px-4 md:px-6 sticky top-0 z-10">
         {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">P</span>
-          </div>
+        <div className="flex items-center gap-2">
+          {hospitalLogoURL ? (
+            <div className="relative w-7 h-7 rounded-md overflow-hidden shrink-0">
+              <Image
+                src={hospitalLogoURL}
+                alt={hospitalName}
+                fill
+                className="object-contain"
+                unoptimized
+              />
+            </div>
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center shrink-0">
+              <span className="text-white font-bold text-xs">
+                {hospitalName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
           <div>
-            <span className="text-gray-800 font-semibold">PatientCare</span>
-            <span className="text-gray-400 text-xs ml-2">Clinical Portal</span>
+            <span className="text-gray-800 dark:text-foreground font-semibold text-sm md:text-base">
+              {hospitalName}
+            </span>
+            <span className="text-gray-400 text-xs ml-1 md:ml-2 hidden sm:inline">
+              Clinical Portal
+            </span>
           </div>
         </div>
 
-        {/* Right — role badge + avatar */}
-        <div className="flex items-center gap-3">
+        {/* Right */}
+        <div className="flex items-center gap-2 md:gap-3">
           {portalUser && (
             <span
-              className={`text-xs px-3 py-1 rounded-full font-medium capitalize ${
+              className={`text-xs px-2 py-0.5 md:px-3 md:py-1 rounded-full font-medium capitalize hidden sm:inline-block ${
                 portalUser.role === "doctor"
                   ? "bg-blue-100 text-blue-700"
                   : "bg-purple-100 text-purple-700"
@@ -81,22 +98,7 @@ export default function PortalShell({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              {/* Use this when Firebase Storage has been activated
-              <button className="w-9 h-9 rounded-full bg-teal-600 text-white font-semibold text-sm flex items-center justify-center hover:opacity-90 transition focus:outline-none overflow-hidden">
-                {user?.photoURL ? (
-                  <Image
-                    src={user.photoURL}
-                    alt="Avatar"
-                    width={36}
-                    height={36}
-                    className="object-cover w-full h-full"
-                  />
-                ) : (
-                  <span>{getInitials()}</span>
-                )}
-              </button> */}
-              {/*  Use this when Firebase Storage is not activated */}
-              <button className="w-9 h-9 rounded-full bg-teal-600 text-white font-semibold text-sm flex items-center justify-center hover:opacity-90 transition focus:outline-none overflow-hidden">
+              <button className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-teal-600 text-white font-semibold text-sm flex items-center justify-center hover:opacity-90 transition focus:outline-none overflow-hidden">
                 {portalUser?.photo ? (
                   <Image
                     src={portalUser.photo}
@@ -107,16 +109,21 @@ export default function PortalShell({
                     unoptimized
                   />
                 ) : (
-                  <span>{getInitials()}</span>
+                  <span className="text-xs md:text-sm">{getInitials()}</span>
                 )}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <div className="px-3 py-2 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-800 truncate">
+              <div className="px-3 py-2 border-b border-gray-100 dark:border-border">
+                <p className="text-sm font-medium text-gray-800 dark:text-foreground truncate">
                   {portalUser?.fullName || "Loading..."}
                 </p>
                 <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                {portalUser && (
+                  <p className="text-xs text-teal-600 capitalize mt-0.5">
+                    {portalUser.role}
+                  </p>
+                )}
               </div>
               <DropdownMenuItem
                 className="cursor-pointer gap-2"
@@ -137,7 +144,7 @@ export default function PortalShell({
       </header>
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 size={32} className="animate-spin text-teal-500" />

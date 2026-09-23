@@ -23,6 +23,7 @@ import { db, storage } from "@/config/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { generateStaffInviteCode } from "@/lib/generateInviteCode";
 import { deleteImage } from "@/lib/uploadImages";
+import { useHospital } from "@/context/HospitalContext";
 
 export interface Patient {
   id: string;
@@ -35,12 +36,13 @@ export interface Patient {
   address: string;
   city: string;
   state: string;
-  zip: string;
+  cardNumber: string;
   nationality: string;
   bloodType: string;
   allergies: string;
   medications: string;
   conditions: string;
+  patientHistory: string;
   emergencyName: string;
   emergencyPhone: string;
   emergencyRelationship: string;
@@ -49,7 +51,6 @@ export interface Patient {
   patientStatus: string;
   assignedDoctor: string;
   observations: string;
-  clinicalRecords?: string[];
   createdAt?: { toDate?: () => Date } | Timestamp;
 }
 
@@ -96,6 +97,14 @@ export interface ClinicalRecord {
   addedByName: string;
   addedByRole: "doctor" | "nurse";
   createdAt: string;
+  attachments?: ClinicalAttachment[];
+}
+
+export interface ClinicalAttachment {
+  name: string;
+  url: string;
+  type: string;
+  size: number;
 }
 
 export interface StaffMember {
@@ -118,6 +127,7 @@ export interface Invoice {
   patientId: string;
   patientName: string;
   service: string;
+  balance: number;
   amount: number;
   date: string;
   paymentStatus: "paid" | "unpaid" | "partially_paid";
@@ -133,6 +143,8 @@ export interface Notification {
 }
 
 interface PatientContextType {
+  hospitalId: string;
+  currentHospital: string;
   patients: Patient[];
   addPatient: (patient: Omit<Patient, "id">) => Promise<void>;
   updatePatient: (updated: Patient) => Promise<void>;
@@ -173,6 +185,7 @@ const PatientContext = createContext<PatientContextType | undefined>(undefined);
 
 export function PatientProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { hospitalId } = useHospital();
 
   const [state, setState] = useState({
     patients: [] as Patient[],
@@ -206,10 +219,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const subCol = (name: string) => {
-    if (!user?.uid) throw new Error("No authenticated user found.");
-    return collection(db, "Hospitals", user.uid, name);
-  };
+  const subCol = (name: string) => collection(db, "Hospitals", hospitalId, name);
 
   const handleFirestoreListenerError = (
     collectionName: string,
@@ -219,7 +229,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (!user?.uid || !user?.emailVerified) {
+    if (!user?.uid || !user?.emailVerified || !hospitalId) {
       const timer = setTimeout(() => {
         setState((prev) => {
           if (
@@ -258,7 +268,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     }
 
     const unsubPatients = onSnapshot(
-      collection(db, "Hospitals", user.uid, "patients"),
+      collection(db, "Hospitals", hospitalId, "patients"),
       (snap) => {
         setState((prev) => ({
           ...prev,
@@ -278,7 +288,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     );
 
     const unsubAppointments = onSnapshot(
-      collection(db, "Hospitals", user.uid, "appointments"),
+      collection(db, "Hospitals", hospitalId, "appointments"),
       (snap) => {
         setState((prev) => ({
           ...prev,
@@ -298,7 +308,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     );
 
     const unsubStaff = onSnapshot(
-      collection(db, "Hospitals", user.uid, "staff"),
+      collection(db, "Hospitals", hospitalId, "staff"),
       (snap) => {
         setState((prev) => ({
           ...prev,
@@ -318,7 +328,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     );
 
     const unsubBilling = onSnapshot(
-      collection(db, "Hospitals", user.uid, "billing"),
+      collection(db, "Hospitals", hospitalId, "billing"),
       (snap) => {
         setState((prev) => ({
           ...prev,
@@ -338,7 +348,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     );
 
     const unsubPortalUsers = onSnapshot(
-      collection(db, "Hospitals", user.uid, "portalUsers"),
+      collection(db, "Hospitals", hospitalId, "portalUsers"),
       (snap) => {
         setState((prev) => ({
           ...prev,
@@ -358,7 +368,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     );
 
     const unsubNotifications = onSnapshot(
-      collection(db, "Hospitals", user.uid, "notifications"),
+      collection(db, "Hospitals", hospitalId, "notifications"),
       (snap) => {
         const notifs = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }) as Notification)
@@ -381,14 +391,14 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       unsubPortalUsers();
       unsubNotifications();
     };
-  }, [user?.uid, user?.emailVerified]);
+  }, [user?.uid, user?.emailVerified, hospitalId]);
 
   // ─── Invite Codes (Root Collection) ───────────────────────────────
   const generateInviteCode = async (
     role: "doctor" | "nurse",
   ): Promise<string> => {
-    if (!user) return "";
-    const code = await generateStaffInviteCode({ hospitalId: user.uid, role });
+    if (!user || !hospitalId) return "";
+    const code = await generateStaffInviteCode({ hospitalId, role });
     await createNotification(
       `Invite code ${code} was generated for a ${role}.`,
       "staff",
@@ -402,28 +412,28 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
   // ─── Portal Users ─────────────────────────────────────────────────
   const updatePortalUser = async (updated: PortalUser) => {
-    if (!user) return;
+    if (!user || !hospitalId) return;
     const { id, ...data } = updated;
-    await updateDoc(doc(db, "Hospitals", user.uid, "portalUsers", id), data);
+    await updateDoc(doc(db, "Hospitals", hospitalId, "portalUsers", id), data);
   };
 
   const deletePortalUser = async (id: string) => {
-    if (!user) return;
-    await deleteDoc(doc(db, "Hospitals", user.uid, "portalUsers", id));
+    if (!user || !hospitalId) return;
+    await deleteDoc(doc(db, "Hospitals", hospitalId, "portalUsers", id));
   };
 
   const assignPatientToPortalUser = async (
     patientId: string,
     portalUserId: string,
   ) => {
-    if (!user) return;
+    if (!user || !hospitalId) return;
     const portalUser = state.portalUsers.find((p) => p.id === portalUserId);
     if (!portalUser) return;
     const updatedPatients = [
       ...new Set([...portalUser.assignedPatients, patientId]),
     ];
     await updateDoc(
-      doc(db, "Hospitals", user.uid, "portalUsers", portalUserId),
+      doc(db, "Hospitals", hospitalId, "portalUsers", portalUserId),
       {
         assignedPatients: updatedPatients,
       },
@@ -434,14 +444,14 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     patientId: string,
     portalUserId: string,
   ) => {
-    if (!user) return;
+    if (!user || !hospitalId) return;
     const portalUser = state.portalUsers.find((p) => p.id === portalUserId);
     if (!portalUser) return;
     const updatedPatients = portalUser.assignedPatients.filter(
       (id) => id !== patientId,
     );
     await updateDoc(
-      doc(db, "Hospitals", user.uid, "portalUsers", portalUserId),
+      doc(db, "Hospitals", hospitalId, "portalUsers", portalUserId),
       {
         assignedPatients: updatedPatients,
       },
@@ -453,8 +463,8 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     message: string,
     type: Notification["type"],
   ) => {
-    if (!user) return;
-    await addDoc(collection(db, "Hospitals", user.uid, "notifications"), {
+    if (!user || !hospitalId) return;
+    await addDoc(collection(db, "Hospitals", hospitalId, "notifications"), {
       message,
       type,
       read: false,
@@ -463,18 +473,18 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   };
 
   const markAsRead = async (id: string) => {
-    if (!user) return;
-    await updateDoc(doc(db, "Hospitals", user.uid, "notifications", id), {
+    if (!user || !hospitalId) return;
+    await updateDoc(doc(db, "Hospitals", hospitalId, "notifications", id), {
       read: true,
     });
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
+    if (!user || !hospitalId) return;
     const unread = notifications.filter((n) => !n.read);
     await Promise.all(
       unread.map((n) =>
-        updateDoc(doc(db, "Hospitals", user.uid, "notifications", n.id), {
+        updateDoc(doc(db, "Hospitals", hospitalId, "notifications", n.id), {
           read: true,
         }),
       ),
@@ -485,6 +495,9 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const addPatient = async (patient: Omit<Patient, "id">) => {
     if (!user?.uid) {
       throw new Error("You must be logged in to add a patient.");
+    }
+    if (!hospitalId) {
+      throw new Error("You must be associated with a hospital to add a patient.");
     }
     await addDoc(subCol("patients"), {
       ...patient,
@@ -498,7 +511,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
   const updatePatient = async (updated: Patient) => {
     const { id, ...data } = updated;
-    await updateDoc(doc(db, "Hospitals", user!.uid, "patients", id), data);
+    await updateDoc(doc(db, "Hospitals", hospitalId, "patients", id), data);
     await createNotification(
       `Patient ${updated.fullName}'s record was updated.`,
       "patient",
@@ -508,9 +521,9 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const deletePatient = async (id: string) => {
     const patient = patients.find((p) => p.id === id);
     if (patient?.photo) {
-      await deleteImage(patient.photo, storage); // Don't forget to pass the patient.photo variable argument when we migrate to Firebase Storage Blaze Plan.
+      await deleteImage(patient.photo, storage);
     }
-    await deleteDoc(doc(db, "Hospitals", user!.uid, "patients", id));
+    await deleteDoc(doc(db, "Hospitals", hospitalId, "patients", id));
     await createNotification(
       `Patient ${patient?.fullName ?? id} was removed from the system.`,
       "patient",
@@ -531,7 +544,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
   const updateAppointment = async (updated: Appointment) => {
     const { id, ...data } = updated;
-    await updateDoc(doc(db, "Hospitals", user!.uid, "appointments", id), data);
+    await updateDoc(doc(db, "Hospitals", hospitalId, "appointments", id), data);
     await createNotification(
       `Appointment for ${updated.patientName} was updated to ${updated.status}.`,
       "appointment",
@@ -540,7 +553,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
   const deleteAppointment = async (id: string) => {
     const appointment = appointments.find((a) => a.id === id);
-    await deleteDoc(doc(db, "Hospitals", user!.uid, "appointments", id));
+    await deleteDoc(doc(db, "Hospitals", hospitalId, "appointments", id));
     await createNotification(
       `Appointment for ${appointment?.patientName ?? id} with ${appointment?.doctor ?? ""} was cancelled.`,
       "appointment",
@@ -548,26 +561,21 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   };
 
   // ─── Staff ────────────────────────────────────────────────────────
-  // Update your addStaffMember function in PatientContext.tsx to this:
-const addStaffMember = async (id: string, member: Omit<StaffMember, "id">) => {
-  // 1. Use the explicitly passed id string directly
-  const docRef = doc(subCol("staff"), id);
-
-  // 2. Save the rest of the payload data
-  await setDoc(docRef, { 
-    ...member, 
-    createdAt: serverTimestamp() 
-  });
-
-  await createNotification(
-    `New ${member.type} ${member.fullName} was added.`,
-    "staff"
-  );
-};
+  const addStaffMember = async (id: string, member: Omit<StaffMember, "id">) => {
+    const docRef = doc(subCol("staff"), id);
+    await setDoc(docRef, {
+      ...member,
+      createdAt: serverTimestamp(),
+    });
+    await createNotification(
+      `New ${member.type} ${member.fullName} was added.`,
+      "staff",
+    );
+  };
 
   const updateStaffMember = async (updated: StaffMember) => {
     const { id, ...data } = updated;
-    await updateDoc(doc(db, "Hospitals", user!.uid, "staff", id), data);
+    await updateDoc(doc(db, "Hospitals", hospitalId, "staff", id), data);
     await createNotification(
       `${updated.type === "doctor" ? "Doctor" : "Staff member"} ${updated.fullName}'s record was updated.`,
       "staff",
@@ -577,9 +585,9 @@ const addStaffMember = async (id: string, member: Omit<StaffMember, "id">) => {
   const deleteStaffMember = async (id: string) => {
     const member = staffMembers.find((s) => s.id === id);
     if (member?.photo) {
-      await deleteImage(member.photo, storage); // Don't forget to pass the member.photo variable argument when we migrate to Firebase Storage Blaze Plan.
+      await deleteImage(member.photo, storage);
     }
-    await deleteDoc(doc(db, "Hospitals", user!.uid, "staff", id));
+    await deleteDoc(doc(db, "Hospitals", hospitalId, "staff", id));
     await createNotification(
       `${member?.type === "doctor" ? "Doctor" : "Staff member"} ${member?.fullName ?? id} was removed from the system.`,
       "staff",
@@ -600,7 +608,7 @@ const addStaffMember = async (id: string, member: Omit<StaffMember, "id">) => {
 
   const updateInvoice = async (updated: Invoice) => {
     const { id, ...data } = updated;
-    await updateDoc(doc(db, "Hospitals", user!.uid, "billing", id), data);
+    await updateDoc(doc(db, "Hospitals", hospitalId, "billing", id), data);
     await createNotification(
       `Invoice ${updated.invoiceNumber} for ${updated.patientName} was updated.`,
       "billing",
@@ -609,7 +617,7 @@ const addStaffMember = async (id: string, member: Omit<StaffMember, "id">) => {
 
   const deleteInvoice = async (id: string) => {
     const invoice = invoices.find((i) => i.id === id);
-    await deleteDoc(doc(db, "Hospitals", user!.uid, "billing", id));
+    await deleteDoc(doc(db, "Hospitals", hospitalId, "billing", id));
     await createNotification(
       `Invoice ${invoice?.invoiceNumber ?? id} for ${invoice?.patientName ?? ""} was deleted.`,
       "billing",
@@ -619,6 +627,8 @@ const addStaffMember = async (id: string, member: Omit<StaffMember, "id">) => {
   return (
     <PatientContext.Provider
       value={{
+        hospitalId,
+        currentHospital: hospitalId,
         patients,
         addPatient,
         updatePatient,

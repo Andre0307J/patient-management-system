@@ -2,45 +2,79 @@
 
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, DocumentData } from "firebase/firestore";
 import { auth, db } from "@/config/firebase";
 import { toast } from "sonner";
 
+// Routes where HospitalIndex hasn't been written yet
+// (during signup flow) — skip verification on these routes
+const SIGNUP_ROUTES = [
+  "/admin/signup",
+  "/admin/verification-sent",
+];
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
+  const [hospitalData, setHospitalData] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         setUser(null);
+        setHospitalData(null);
+        setLoading(false);
+        return;
+      }
+
+      // During signup, the Auth account is created BEFORE Firestore writes.
+      // onAuthStateChanged fires immediately — HospitalIndex doesn't exist yet.
+      // Skip the verification check on signup routes to prevent false "Access denied".
+      const currentPath = window.location.pathname;
+      const isSignupRoute = SIGNUP_ROUTES.some((route) =>
+        currentPath.startsWith(route)
+      );
+
+      if (isSignupRoute) {
+        setUser(firebaseUser);
         setLoading(false);
         return;
       }
 
       try {
-        // 1. Check if this user exists in the Hospitals (Admin) collection
-        const adminDocRef = doc(db, "Hospitals", firebaseUser.uid);
-        const adminDoc = await getDoc(adminDocRef);
+        // Look up HospitalIndex to verify this is an admin account
+        const indexDocRef = doc(db, "HospitalIndex", firebaseUser.uid);
+        const indexDocSnap = await getDoc(indexDocRef);
 
-        if (!adminDoc.exists()) {
-          // 2. User exists in Auth, but is NOT a Hospital Admin (e.g. they are a Doctor/Staff)
+        if (!indexDocSnap.exists()) {
+          // No HospitalIndex means this isn't an admin account
           toast.error("Access denied. Staff members must use the Staff Portal.");
-
-          // Terminate the active session on the primary auth instance
           await signOut(auth);
           setUser(null);
-
-          // Redirect to root login page
+          setHospitalData(null);
           window.location.href = "/";
           return;
         }
 
-        // 3. User is a valid Admin
+        const hospitalName = indexDocSnap.data().hospitalName;
+        const hospitalDocRef = doc(db, "Hospitals", hospitalName);
+        const hospitalDocSnap = await getDoc(hospitalDocRef);
+
+        if (!hospitalDocSnap.exists()) {
+          toast.error("Hospital record not found. Please contact support.");
+          await signOut(auth);
+          setUser(null);
+          setHospitalData(null);
+          window.location.href = "/";
+          return;
+        }
+
         setUser(firebaseUser);
+        setHospitalData(hospitalDocSnap.data());
       } catch (error) {
         console.error("Error verifying admin account:", error);
         setUser(null);
+        setHospitalData(null);
       } finally {
         setLoading(false);
       }
@@ -49,5 +83,5 @@ export function useAuth() {
     return () => unsubscribe();
   }, []);
 
-  return { user, loading };
+  return { user, hospitalData, loading };
 }

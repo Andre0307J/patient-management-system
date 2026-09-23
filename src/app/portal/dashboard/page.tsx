@@ -64,7 +64,7 @@ export default function PortalDashboardPage() {
                 className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition cursor-pointer"
               >
                 {/* Photo */}
-                <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+                <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
                   {patient.photo ? (
                     <Image
                       src={patient.photo}
@@ -80,8 +80,8 @@ export default function PortalDashboardPage() {
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">{patient.fullName}</p>
-                  <p className="text-xs text-gray-400">{patient.id}</p>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-foreground truncate">{patient.fullName}</p>
+                   <p className="text-xs text-gray-400 truncate">{patient.id}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
                       statusColors[patient.patientStatus] || "bg-gray-100 text-gray-500"

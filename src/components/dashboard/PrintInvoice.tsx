@@ -3,9 +3,11 @@
 import { Invoice } from "@/context/PatientContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { Printer } from "lucide-react";
+import { useHospital } from "@/context/HospitalContext";
 
 export default function PrintInvoice({ invoice }: { invoice: Invoice }) {
   const { symbol, currency, country } = useCurrency();
+  const { hospitalName, logoURL } = useHospital();
 
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -70,8 +72,9 @@ export default function PrintInvoice({ invoice }: { invoice: Invoice }) {
         </head>
         <body>
           <div class="header">
-            <div>
-              <div class="clinic-name">PatientCare</div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              ${logoURL ? `<img src="${logoURL}" alt="${hospitalName}" style="width:48px;height:48px;object-fit:contain;" />` : ""}
+              <div class="clinic-name">${hospitalName}</div>
               <div class="clinic-sub">Medical Management System</div>
               <div class="clinic-sub">${country}</div>
             </div>

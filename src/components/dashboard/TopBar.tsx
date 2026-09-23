@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Search,
   Menu,
@@ -38,9 +38,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { usePatients } from "@/context/PatientContext";
+import { useHospital } from "@/context/HospitalContext";
 import Image from "next/image";
-import { db } from "@/config/firebase";
-import { doc, getDoc } from "firebase/firestore";
 
 interface TopBarProps {
   onToggleSidebar: () => void;
@@ -54,34 +53,14 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
   const [openInvoiceModal, setOpenInvoiceModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
-  const [adminPhoto, setAdminPhoto] = useState<string | null>(null);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   const router = useRouter();
+  const { hospitalName, logoURL } = useHospital();
   const pathname = usePathname();
   const { user } = useAuth();
-  const {
-    patients,
-    staffMembers,
-    notifications,
-    unreadCount,
-    markAsRead,
-    markAllAsRead,
-  } = usePatients();
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    const loadPhoto = async () => {
-      try {
-        const hospitalDoc = await getDoc(doc(db, "Hospitals", user.uid));
-        if (hospitalDoc.exists() && hospitalDoc.data().photoURL) {
-          setAdminPhoto(hospitalDoc.data().photoURL);
-        }
-      } catch (error) {
-        console.error("Error loading admin photo:", error);
-      }
-    };
-    loadPhoto();
-  }, [user?.uid]);
+  const { patients, staffMembers, notifications, unreadCount, markAllAsRead } =
+    usePatients();
 
   // Page detection
   const isPatientPage = pathname === "/dashboard/patients";
@@ -97,9 +76,11 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
           ...patients
             .filter(
               (p) =>
-                p.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.fullName
+                  .toLowerCase()
+                  .includes(searchQuery.toLowerCase()) ||
                 p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.email.toLowerCase().includes(searchQuery.toLowerCase()),
+                p.email.toLowerCase().includes(searchQuery.toLowerCase())
             )
             .map((p) => ({
               type: "Patient",
@@ -110,8 +91,10 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
           ...staffMembers
             .filter(
               (s) =>
-                s.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                s.id.toLowerCase().includes(searchQuery.toLowerCase()),
+                s.fullName
+                  .toLowerCase()
+                  .includes(searchQuery.toLowerCase()) ||
+                s.id.toLowerCase().includes(searchQuery.toLowerCase())
             )
             .map((s) => ({
               type: s.type === "doctor" ? "Doctor" : "Staff",
@@ -140,26 +123,25 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
     try {
       await signOut(auth);
       toast.success("Signed out successfully.");
-      
-      // 👇 Swapped out router.replace to guarantee a complete cleanup on sign out
-      window.location.href = "/admin";
-      
+      router.replace("/admin");
     } catch (error) {
-      toast.error("Failed to sign out. Please try again.");
+      toast.error("Failed to sign out.");
       console.error("Sign out error:", error);
     }
   };
 
-  // Dynamic add button based on current page
   const renderAddButton = () => {
     if (isPatientPage)
       return (
         <Button
           onClick={() => setOpenPatientModal(true)}
           variant="outline"
-          className="cursor-pointer bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 gap-2 shadow-none"
+          size="sm"
+          className="cursor-pointer bg-white dark:bg-card border border-gray-200 dark:border-border text-gray-700 dark:text-gray-300 hover:bg-gray-50 gap-1.5 shadow-none text-xs md:text-sm"
         >
-          <UserPlus size={16} /> Add New Patient
+          <UserPlus size={14} />
+          <span className="hidden sm:inline">Add New Patient</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       );
     if (isAppointmentPage)
@@ -167,9 +149,12 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
         <Button
           onClick={() => setOpenAppointmentModal(true)}
           variant="outline"
-          className="cursor-pointer bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 gap-2 shadow-none"
+          size="sm"
+          className="cursor-pointer bg-white dark:bg-card border border-gray-200 dark:border-border text-gray-700 dark:text-gray-300 hover:bg-gray-50 gap-1.5 shadow-none text-xs md:text-sm"
         >
-          <CalendarPlus size={16} /> Add Appointment
+          <CalendarPlus size={14} />
+          <span className="hidden sm:inline">Add Appointment</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       );
     if (isDoctorPage)
@@ -177,9 +162,12 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
         <Button
           onClick={() => setOpenDoctorModal(true)}
           variant="outline"
-          className="cursor-pointer bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 gap-2 shadow-none"
+          size="sm"
+          className="cursor-pointer bg-white dark:bg-card border border-gray-200 dark:border-border text-gray-700 dark:text-gray-300 hover:bg-gray-50 gap-1.5 shadow-none text-xs md:text-sm"
         >
-          <Stethoscope size={16} /> Add Doctor
+          <Stethoscope size={14} />
+          <span className="hidden sm:inline">Add Doctor</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       );
     if (isStaffPage)
@@ -187,9 +175,12 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
         <Button
           onClick={() => setOpenStaffModal(true)}
           variant="outline"
-          className="cursor-pointer bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 gap-2 shadow-none"
+          size="sm"
+          className="cursor-pointer bg-white dark:bg-card border border-gray-200 dark:border-border text-gray-700 dark:text-gray-300 hover:bg-gray-50 gap-1.5 shadow-none text-xs md:text-sm"
         >
-          <Users size={16} /> Add Staff Member
+          <Users size={14} />
+          <span className="hidden sm:inline">Add Staff Member</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       );
     if (isBillingPage)
@@ -197,9 +188,12 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
         <Button
           onClick={() => setOpenInvoiceModal(true)}
           variant="outline"
-          className="cursor-pointer bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 gap-2 shadow-none"
+          size="sm"
+          className="cursor-pointer bg-white dark:bg-card border border-gray-200 dark:border-border text-gray-700 dark:text-gray-300 hover:bg-gray-50 gap-1.5 shadow-none text-xs md:text-sm"
         >
-          <CreditCard size={16} /> Create Invoice
+          <CreditCard size={14} />
+          <span className="hidden sm:inline">Create Invoice</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       );
     return null;
@@ -207,18 +201,20 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
 
   return (
     <>
-      <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 shrink-0">
+      <header className="h-16 bg-card border-b border-border flex items-center justify-between px-3 md:px-6 shrink-0 gap-2">
         {/* Left — toggle + search */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
           <Button
             variant="ghost"
             size="icon"
             onClick={onToggleSidebar}
-            className="text-muted-foreground hover:text-foreground cursor-pointer"
+            className="text-muted-foreground hover:text-foreground shrink-0"
           >
             <Menu size={20} />
           </Button>
-          <div className="relative">
+
+          {/* Desktop search */}
+          <div className="relative hidden md:block">
             <Search
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10"
@@ -226,7 +222,7 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
             <Input
               type="text"
               placeholder="Search patients, doctors..."
-              className="pl-9 w-72 bg-muted border-border"
+              className="pl-9 w-56 lg:w-72 bg-muted border-border"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -235,7 +231,6 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
               onFocus={() => setShowResults(true)}
               onBlur={() => setTimeout(() => setShowResults(false), 200)}
             />
-            {/* Search Results Dropdown */}
             {showResults && searchQuery.trim().length > 1 && (
               <div className="absolute top-full left-0 mt-1 w-72 bg-card rounded-xl border border-border shadow-lg z-50 overflow-hidden">
                 {searchResults.length === 0 ? (
@@ -267,8 +262,8 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                             result.type === "Patient"
                               ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
                               : result.type === "Doctor"
-                                ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
-                                : "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
+                              ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
+                              : "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
                           }`}
                         >
                           {result.type}
@@ -280,18 +275,25 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
               </div>
             )}
           </div>
+
+          {/* Mobile search button */}
+          <button
+            className="md:hidden p-2 rounded-md hover:bg-accent text-muted-foreground"
+            onClick={() => setShowMobileSearch(true)}
+          >
+            <Search size={18} />
+          </button>
         </div>
 
-        {/* Right — dynamic add button + notifications + avatar */}
-        <div className="flex items-center gap-3">
-          {/* Dynamic Add Button */}
+        {/* Right */}
+        <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
           {renderAddButton()}
 
           {/* Notification Bell */}
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={(open) => open && markAllAsRead()}>
             <DropdownMenuTrigger asChild>
-              <button className="cursor-pointer relative p-2 rounded-full hover:bg-gray-100 transition focus:outline-none">
-                <Bell size={20} className="text-gray-500" />
+              <button className="relative p-2 rounded-full hover:bg-accent transition focus:outline-none">
+                <Bell size={18} className="text-muted-foreground" />
                 {unreadCount > 0 && (
                   <Badge className="absolute -top-0.5 -right-0.5 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-red-500 hover:bg-red-500">
                     {unreadCount}
@@ -299,8 +301,8 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <div className="px-3 py-2 font-semibold text-sm text-gray-700 border-b flex items-center justify-between">
+            <DropdownMenuContent align="end" className="w-72 md:w-80">
+              <div className="px-3 py-2 font-semibold text-sm text-foreground border-b border-border flex items-center justify-between">
                 <span>Notifications</span>
                 {unreadCount > 0 && (
                   <span
@@ -312,17 +314,18 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                 )}
               </div>
               {notifications.length === 0 ? (
-                <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                <div className="px-3 py-4 text-sm text-muted-foreground text-center">
                   No notifications yet.
                 </div>
               ) : (
                 <>
-                  <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                  <div className="divide-y divide-border max-h-72 overflow-y-auto">
                     {notifications.slice(0, 10).map((n) => (
                       <DropdownMenuItem
                         key={n.id}
-                        className={`flex flex-col items-start gap-0.5 px-3 py-2 cursor-pointer ${!n.read ? "bg-blue-50" : ""}`}
-                        onClick={() => markAsRead(n.id)}
+                        className={`flex flex-col items-start gap-0.5 px-3 py-2 cursor-pointer ${
+                          !n.read ? "bg-blue-50 dark:bg-blue-900/10" : ""
+                        }`}
                       >
                         <div className="flex items-start gap-2 w-full">
                           <div
@@ -330,24 +333,24 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                               n.type === "patient"
                                 ? "bg-blue-500"
                                 : n.type === "appointment"
-                                  ? "bg-purple-500"
-                                  : n.type === "staff"
-                                    ? "bg-orange-500"
-                                    : "bg-green-500"
+                                ? "bg-purple-500"
+                                : n.type === "staff"
+                                ? "bg-orange-500"
+                                : "bg-green-500"
                             }`}
                           />
-                          <div className="flex-1">
-                            <span className="text-sm text-gray-700">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-foreground line-clamp-2">
                               {n.message}
                             </span>
-                            <p className="text-xs text-gray-400 mt-0.5">
+                            <p className="text-xs text-muted-foreground mt-0.5">
                               {new Date(n.createdAt).toLocaleDateString(
                                 "en-US",
                                 {
                                   month: "short",
                                   day: "numeric",
                                   year: "numeric",
-                                },
+                                }
                               )}{" "}
                               at{" "}
                               {new Date(n.createdAt).toLocaleTimeString(
@@ -355,7 +358,7 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                                 {
                                   hour: "2-digit",
                                   minute: "2-digit",
-                                },
+                                }
                               )}
                             </p>
                           </div>
@@ -378,27 +381,55 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
           {/* Avatar Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-9 cursor-pointer h-9 rounded-full bg-blue-600 text-white font-semibold text-sm flex items-center justify-center hover:opacity-90 transition focus:outline-none overflow-hidden">
-                {adminPhoto ? (
+              <button className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-blue-600 text-white font-semibold text-sm flex items-center justify-center hover:opacity-90 transition focus:outline-none overflow-hidden shrink-0">
+                {user?.photoURL ? (
                   <Image
-                    src={adminPhoto}
+                    src={user.photoURL}
                     alt="Avatar"
                     width={36}
                     height={36}
                     className="object-cover w-full h-full"
-                    unoptimized
                   />
                 ) : (
-                  <span>{getInitials()}</span>
+                  <span className="text-xs md:text-sm">{getInitials()}</span>
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <div className="px-3 py-2 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-800 truncate">
-                  {user?.displayName || "Admin"}
-                </p>
-                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+            <DropdownMenuContent align="end" className="w-64">
+              <div className="px-3 py-3 border-b border-border">
+                <div className="flex items-center gap-3 min-w-0">
+                  {logoURL ? (
+                    <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border bg-muted shrink-0">
+                      <Image
+                        src={logoURL}
+                        alt={hospitalName}
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                      <span className="text-white font-bold text-lg">
+                        {hospitalName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Hospital</p>
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      {hospitalName}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-2 border-t border-border">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {user?.displayName || "Admin"}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {user?.email}
+                  </p>
+                </div>
               </div>
               <DropdownMenuItem
                 className="cursor-pointer"
@@ -418,9 +449,79 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
         </div>
       </header>
 
-      {/* Add Patient Modal */}
+      {/* Mobile Search Modal */}
+      <Dialog open={showMobileSearch} onOpenChange={setShowMobileSearch}>
+        <DialogContent className="w-[95vw] max-w-md top-4 translate-y-0 sm:top-[50%] sm:-translate-y-1/2">
+          <DialogHeader>
+            <DialogTitle>Search</DialogTitle>
+            <DialogDescription>
+              Search patients, doctors and staff
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10"
+            />
+            <Input
+              type="text"
+              placeholder="Search patients, doctors..."
+              className="pl-9 bg-muted border-border"
+              value={searchQuery}
+              autoFocus
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowResults(true);
+              }}
+            />
+          </div>
+          {searchQuery.trim().length > 1 && (
+            <div className="divide-y divide-border max-h-64 overflow-y-auto rounded-lg border border-border">
+              {searchResults.length === 0 ? (
+                <div className="px-4 py-3 text-sm text-muted-foreground">
+                  No results found for &quot;{searchQuery}&quot;
+                </div>
+              ) : (
+                searchResults.map((result, index) => (
+                  <button
+                    key={index}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-accent transition text-left"
+                    onClick={() => {
+                      router.push(result.href);
+                      setSearchQuery("");
+                      setShowMobileSearch(false);
+                    }}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {result.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {result.id}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        result.type === "Patient"
+                          ? "bg-blue-100 text-blue-700"
+                          : result.type === "Doctor"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-orange-100 text-orange-700"
+                      }`}
+                    >
+                      {result.type}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modals */}
       <Dialog open={openPatientModal} onOpenChange={setOpenPatientModal}>
-        <DialogContent className="w-[90vw] !max-w-2xl">
+        <DialogContent className="w-[95vw] !max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Patient</DialogTitle>
             <DialogDescription>
@@ -432,43 +533,35 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Add Appointment Modal */}
       <Dialog
         open={openAppointmentModal}
         onOpenChange={setOpenAppointmentModal}
       >
-        <DialogContent className="w-[90vw] !max-w-lg">
+        <DialogContent className="w-[95vw] !max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Schedule Appointment</DialogTitle>
             <DialogDescription>
               Fill in the details below to schedule a new appointment.
             </DialogDescription>
           </DialogHeader>
-          <AddAppointmentForm
-            onSuccess={() => setOpenAppointmentModal(false)}
-          />
+          <AddAppointmentForm onSuccess={() => setOpenAppointmentModal(false)} />
         </DialogContent>
       </Dialog>
 
-      {/* Add Doctor Modal */}
       <Dialog open={openDoctorModal} onOpenChange={setOpenDoctorModal}>
-        <DialogContent className="w-[90vw] !max-w-xl">
+        <DialogContent className="w-[95vw] !max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Doctor</DialogTitle>
             <DialogDescription>
               Fill in the details to add a new doctor.
             </DialogDescription>
           </DialogHeader>
-          <StaffForm
-            type="doctor"
-            onSuccess={() => setOpenDoctorModal(false)}
-          />
+          <StaffForm type="doctor" onSuccess={() => setOpenDoctorModal(false)} />
         </DialogContent>
       </Dialog>
 
-      {/* Add Staff Modal */}
       <Dialog open={openStaffModal} onOpenChange={setOpenStaffModal}>
-        <DialogContent className="w-[90vw] !max-w-xl">
+        <DialogContent className="w-[95vw] !max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Staff Member</DialogTitle>
             <DialogDescription>
@@ -479,9 +572,8 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Add Invoice Modal */}
       <Dialog open={openInvoiceModal} onOpenChange={setOpenInvoiceModal}>
-        <DialogContent className="w-[90vw] !max-w-lg">
+        <DialogContent className="w-[95vw] !max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Invoice</DialogTitle>
             <DialogDescription>

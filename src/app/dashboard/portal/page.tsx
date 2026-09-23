@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePatients, PortalUser, InviteCode } from "@/context/PatientContext";
+import {
+  usePatients,
+  PortalUser,
+  InviteCode,
+  Patient,
+} from "@/context/PatientContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -38,14 +43,15 @@ import { db } from "@/config/firebase";
 
 export default function PortalManagementPage() {
   const {
-    portalUsers,
+    portalUsers = [],
     updatePortalUser,
     deletePortalUser,
-    patients,
+    patients = [],
     assignPatientToPortalUser,
     unassignPatientFromPortalUser,
     generateInviteCode,
     deleteInviteCode,
+    hospitalId,
   } = usePatients();
 
   const [generatingRole, setGeneratingRole] = useState<"doctor" | "nurse" | null>(null);
@@ -56,21 +62,27 @@ export default function PortalManagementPage() {
   const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
 
   useEffect(() => {
-    if (!user) return;
+  if (!user) return;
 
-    const q = query(
-      collection(db, "InviteCodes"),
-      where("hospitalId", "==", user.uid),
+  const activeHospitalId = hospitalId || user.uid;
+
+  const searchIds = Array.from(
+    new Set([user.uid, activeHospitalId].filter(Boolean))
+  );
+
+  const q =
+    searchIds.length > 1
+      ? query(collection(db, "InviteCodes"), where("hospitalId", "in", searchIds))
+      : query(collection(db, "InviteCodes"), where("hospitalId", "==", searchIds[0]));
+
+  const unsub = onSnapshot(q, (snap) => {
+    setInviteCodes(
+      snap.docs.map((d) => ({ id: d.id, ...d.data() }) as InviteCode)
     );
+  });
 
-    const unsub = onSnapshot(q, (snap) => {
-      setInviteCodes(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }) as InviteCode),
-      );
-    });
-
-    return () => unsub();
-  }, [user]);
+  return () => unsub();
+}, [user, hospitalId]);
 
   const handleGenerateCode = async (role: "doctor" | "nurse") => {
     setGeneratingRole(role);
@@ -113,7 +125,9 @@ export default function PortalManagementPage() {
         status: portalUser.status === "active" ? "inactive" : "active",
       });
       toast.success(
-        `${portalUser.fullName} has been ${portalUser.status === "active" ? "deactivated" : "activated"}.`,
+        `${portalUser.fullName} has been ${
+          portalUser.status === "active" ? "deactivated" : "activated"
+        }.`
       );
     } catch (error) {
       toast.error("Failed to update status.");
@@ -135,8 +149,8 @@ export default function PortalManagementPage() {
 
   const unusedCodes = inviteCodes.filter((c) => !c.used);
   const usedCodes = inviteCodes.filter((c) => c.used);
-  const doctors = portalUsers.filter((p) => p.role === "doctor");
-  const nurses = portalUsers.filter((p) => p.role === "nurse");
+  const doctors = portalUsers.filter((p: PortalUser) => p.role === "doctor");
+  const nurses = portalUsers.filter((p: PortalUser) => p.role === "nurse");
 
   return (
     <div className="space-y-6">
@@ -187,11 +201,13 @@ export default function PortalManagementPage() {
             {unusedCodes.map((code) => (
               <div key={code.id} className="flex items-center justify-between px-5 py-3">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize shrink-0 ${
-                    code.role === "doctor"
-                      ? "bg-blue-100 text-blue-700"
-                      : "bg-purple-100 text-purple-700"
-                  }`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize shrink-0 ${
+                      code.role === "doctor"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-purple-100 text-purple-700"
+                    }`}
+                  >
                     {code.role}
                   </span>
                   <div className="min-w-0">
@@ -237,11 +253,13 @@ export default function PortalManagementPage() {
             {usedCodes.map((code) => (
               <div key={code.id} className="flex items-center justify-between px-5 py-3 bg-gray-50/20">
                 <div className="flex items-center gap-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize opacity-60 ${
-                    code.role === "doctor"
-                      ? "bg-blue-100 text-blue-700"
-                      : "bg-purple-100 text-purple-700"
-                  }`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize opacity-60 ${
+                      code.role === "doctor"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-purple-100 text-purple-700"
+                    }`}
+                  >
                     {code.role}
                   </span>
                   <span className="font-mono text-sm font-medium text-gray-400 line-through tracking-wider">
@@ -250,7 +268,10 @@ export default function PortalManagementPage() {
                   <div className="flex items-center gap-1.5 text-xs text-green-600">
                     <CheckCircle2 size={12} />
                     <span>
-                      Used by: <span className="font-mono">{code.usedBy?.slice(0, 8) ?? "Unknown"}...</span>
+                      Used by:{" "}
+                      <span className="font-mono">
+                        {code.usedBy?.slice(0, 8) ?? "Unknown"}...
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -270,7 +291,9 @@ export default function PortalManagementPage() {
       {/* Portal Users — Doctors */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700">Doctors ({doctors.length})</h2>
+          <h2 className="text-sm font-semibold text-gray-700">
+            Doctors ({doctors.length})
+          </h2>
         </div>
         {doctors.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-gray-400">
@@ -278,23 +301,33 @@ export default function PortalManagementPage() {
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {doctors.map((doctor) => (
+            {doctors.map((doctor: PortalUser) => (
               <div key={doctor.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{doctor.fullName}</p>
                   <p className="text-xs text-gray-400">{doctor.email}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {doctor.assignedPatients.length} patient{doctor.assignedPatients.length !== 1 ? "s" : ""} assigned
+                    {doctor.assignedPatients?.length ?? 0} patient
+                    {(doctor.assignedPatients?.length ?? 0) !== 1 ? "s" : ""} assigned
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "text-xs px-2 py-0.5 rounded-full font-medium",
-                    doctor.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-                  )}>
+                  <span
+                    className={cn(
+                      "text-xs px-2 py-0.5 rounded-full font-medium",
+                      doctor.status === "active"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-500"
+                    )}
+                  >
                     {doctor.status}
                   </span>
-                  <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => setAssignTarget(doctor)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-xs"
+                    onClick={() => setAssignTarget(doctor)}
+                  >
                     <RefreshCw size={12} /> Assign Patients
                   </Button>
                   <button
@@ -321,7 +354,9 @@ export default function PortalManagementPage() {
       {/* Portal Users — Nurses */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700">Nurses ({nurses.length})</h2>
+          <h2 className="text-sm font-semibold text-gray-700">
+            Nurses ({nurses.length})
+          </h2>
         </div>
         {nurses.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-gray-400">
@@ -329,23 +364,33 @@ export default function PortalManagementPage() {
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {nurses.map((nurse) => (
+            {nurses.map((nurse: PortalUser) => (
               <div key={nurse.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{nurse.fullName}</p>
                   <p className="text-xs text-gray-400">{nurse.email}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {nurse.assignedPatients.length} patient{nurse.assignedPatients.length !== 1 ? "s" : ""} assigned
+                    {nurse.assignedPatients?.length ?? 0} patient
+                    {(nurse.assignedPatients?.length ?? 0) !== 1 ? "s" : ""} assigned
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "text-xs px-2 py-0.5 rounded-full font-medium",
-                    nurse.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-                  )}>
+                  <span
+                    className={cn(
+                      "text-xs px-2 py-0.5 rounded-full font-medium",
+                      nurse.status === "active"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-500"
+                    )}
+                  >
                     {nurse.status}
                   </span>
-                  <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => setAssignTarget(nurse)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-xs"
+                    onClick={() => setAssignTarget(nurse)}
+                  >
                     <RefreshCw size={12} /> Assign Patients
                   </Button>
                   <button
@@ -383,8 +428,8 @@ export default function PortalManagementPage() {
               {patients.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-4">No patients added yet.</p>
               ) : (
-                patients.map((patient) => {
-                  const isAssigned = assignTarget.assignedPatients.includes(patient.id);
+                patients.map((patient: Patient) => {
+                  const isAssigned = assignTarget.assignedPatients?.includes(patient.id);
                   return (
                     <div
                       key={patient.id}
@@ -396,12 +441,27 @@ export default function PortalManagementPage() {
                         if (isAssigned) {
                           await unassignPatientFromPortalUser(patient.id, assignTarget.id);
                           setAssignTarget((prev) =>
-                            prev ? { ...prev, assignedPatients: prev.assignedPatients.filter((id) => id !== patient.id) } : null
+                            prev
+                              ? {
+                                  ...prev,
+                                  assignedPatients: prev.assignedPatients.filter(
+                                    (id) => id !== patient.id
+                                  ),
+                                }
+                              : null
                           );
                         } else {
                           await assignPatientToPortalUser(patient.id, assignTarget.id);
                           setAssignTarget((prev) =>
-                            prev ? { ...prev, assignedPatients: [...prev.assignedPatients, patient.id] } : null
+                            prev
+                              ? {
+                                  ...prev,
+                                  assignedPatients: [
+                                    ...(prev.assignedPatients || []),
+                                    patient.id,
+                                  ],
+                                }
+                              : null
                           );
                         }
                       }}
@@ -410,10 +470,12 @@ export default function PortalManagementPage() {
                         <p className="text-sm font-medium text-gray-800">{patient.fullName}</p>
                         <p className="text-xs text-gray-400">{patient.id}</p>
                       </div>
-                      <span className={cn(
-                        "text-xs px-2 py-0.5 rounded-full font-medium",
-                        isAssigned ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"
-                      )}>
+                      <span
+                        className={cn(
+                          "text-xs px-2 py-0.5 rounded-full font-medium",
+                          isAssigned ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"
+                        )}
+                      >
                         {isAssigned ? "Assigned" : "Not Assigned"}
                       </span>
                     </div>

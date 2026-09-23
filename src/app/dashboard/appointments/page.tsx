@@ -108,7 +108,7 @@ export default function AppointmentsPage() {
       </div>
 
       {/* Calendar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-border p-3 md:p-5 overflow-x-auto">
         {/* Calendar Navigation */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-700">{monthName}</h2>

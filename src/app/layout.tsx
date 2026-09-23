@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
 // Use the local geist package instead of Google Fonts
-import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Toaster } from "@/components/ui/sonner";
 import { PatientProvider } from "@/context/PatientContext";
 import "./globals.css";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { ThemeProvider } from "next-themes";
+import { HospitalProvider } from "@/context/HospitalContext";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { DM_Sans } from "next/font/google";
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Patient Care Management System",
@@ -32,7 +39,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
+      className={`${dmSans.variable} ${GeistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
@@ -43,11 +50,13 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <CurrencyProvider>
-            <PatientProvider>
-              {children}
-              <Toaster />
-              <SpeedInsights />
-            </PatientProvider>
+            <HospitalProvider>
+              <PatientProvider>
+                {children}
+                <Toaster />
+                <SpeedInsights />
+              </PatientProvider>
+            </HospitalProvider>
           </CurrencyProvider>
         </ThemeProvider>
       </body>

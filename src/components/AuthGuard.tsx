@@ -2,68 +2,81 @@
 
 import { useEffect, useState } from "react";
 import { auth } from "@/config/firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
+import { usePathname, useRouter } from "next/navigation";
+
+// Public routes that do not require auth checks
+const PUBLIC_ROUTES = [
+  "/",
+  "/admin",
+  "/admin/signup",
+  "/admin/verification-sent",
+  "/admin/forgot-password",
+  "/auth/action",
+];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isVerified, setIsVerified] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: NodeJS.Timeout | undefined;
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // 1. Not logged in
       if (!currentUser) {
-        setUser(null);
-        setIsVerified(false);
         setLoading(false);
-        
-        // Not authenticated: force redirect to root login page
-        if (window.location.pathname !== "/") {
-          window.location.href = "/";
+        const isPublic = PUBLIC_ROUTES.some(
+          (route) => pathname === route || pathname.startsWith(route)
+        );
+        if (!isPublic) {
+          router.push("/admin");
         }
         return;
       }
 
-      setUser(currentUser);
-
-      // 1. Unverified User Check
+      // 2. Logged in but email not verified
       if (!currentUser.emailVerified) {
-        setIsVerified(false);
         setLoading(false);
-        
-        // Redirect to verification pending page
-        if (window.location.pathname !== "/verification-sent") {
-          window.location.href = "/verification-sent";
+
+        // Allow user to stay on signup and verification pages
+        if (
+          pathname === "/admin/signup" ||
+          pathname === "/admin/verification-sent"
+        ) {
+          return;
         }
 
-        if (interval) clearInterval(interval);
+        // Redirect unverified users to verification page
+        if (pathname !== "/admin/verification-sent") {
+          router.push("/admin/verification-sent");
+        }
 
-        // Polling to detect verification in real-time
+        // Poll for verification
+        if (interval) clearInterval(interval);
         interval = setInterval(async () => {
           try {
             await currentUser.reload();
             if (auth.currentUser?.emailVerified) {
               clearInterval(interval);
-              setIsVerified(true);
-              // Send to root login page as per our updated security flow
-              window.location.href = "/";
+              // Send to admin login after verification
+              router.push("/admin");
             }
           } catch (error) {
             console.error("AuthGuard polling error:", error);
           }
         }, 5000);
-        
+
         return;
       }
 
-      // 2. Verified Admin User
-      setIsVerified(true);
+      // 3. Logged in and verified
       setLoading(false);
 
-      // If verified user navigates to verification-sent page, return them to login
-      if (window.location.pathname === "/verification-sent") {
-        window.location.href = "/";
+      // If verified user lands on verification page, send to admin login
+      if (pathname === "/admin/verification-sent") {
+        router.push("/admin");
       }
     });
 
@@ -71,14 +84,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       unsubscribe();
       if (interval) clearInterval(interval);
     };
-  }, []);
+  }, [pathname, router]);
 
-  // Prevent UI flash or Firestore read permission errors while checking state
   if (loading) {
-    return null; // Or a subtle loading spinner
-  }
-
-  if (user && !isVerified && window.location.pathname !== "/verification-sent") {
     return null;
   }
 

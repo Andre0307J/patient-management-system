@@ -39,7 +39,36 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { collection, onSnapshot, FirestoreError } from "firebase/firestore";
 import { db } from "@/config/firebase";
-import { useAuth } from "@/hooks/useAuth";
+
+interface FirestoreTimestampLike {
+  toDate?: () => Date;
+  seconds?: number;
+}
+
+function parseTimestamp(dateValue: unknown): number {
+  if (!dateValue) return 0;
+  if (typeof dateValue === "string" || typeof dateValue === "number") {
+    return new Date(dateValue).getTime() || 0;
+  }
+  if (dateValue instanceof Date) {
+    return dateValue.getTime();
+  }
+  if (typeof dateValue === "object" && dateValue !== null) {
+    const ts = dateValue as FirestoreTimestampLike;
+    if (typeof ts.toDate === "function") {
+      return ts.toDate().getTime();
+    }
+    if (typeof ts.seconds === "number") {
+      return ts.seconds * 1000;
+    }
+  }
+  return 0;
+}
+
+function formatDate(dateValue: unknown): Date {
+  const time = parseTimestamp(dateValue);
+  return time ? new Date(time) : new Date();
+}
 
 const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-700",
@@ -68,8 +97,7 @@ const recordTypeLabels: Record<string, string> = {
 };
 
 export default function PatientsPage() {
-  const { patients, deletePatient } = usePatients();
-  const { user } = useAuth();
+  const { patients, deletePatient, hospitalId } = usePatients();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [editPatient, setEditPatient] = useState<Patient | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Patient | null>(null);
@@ -89,7 +117,7 @@ export default function PatientsPage() {
 
   // Load clinical records when a patient is selected
   useEffect(() => {
-    if (!selectedPatient || !user) {
+    if (!selectedPatient || !hospitalId) {
       return;
     }
 
@@ -97,7 +125,7 @@ export default function PatientsPage() {
       collection(
         db,
         "Hospitals",
-        user.uid,
+        hospitalId,
         "patients",
         selectedPatient.id,
         "clinicalRecords",
@@ -106,8 +134,7 @@ export default function PatientsPage() {
         const records = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }) as ClinicalRecord)
           .sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+            (a, b) => parseTimestamp(b.createdAt) - parseTimestamp(a.createdAt),
           );
         setClinicalRecords(records);
         setLoadingRecords(false);
@@ -119,7 +146,7 @@ export default function PatientsPage() {
     );
 
     return () => unsub();
-  }, [selectedPatient, user]);
+  }, [selectedPatient, hospitalId]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -190,23 +217,10 @@ export default function PatientsPage() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {[...filtered]
-            .sort((a, b) => {
-              const dateA = a.createdAt
-                ? typeof a.createdAt === "string"
-                  ? new Date(a.createdAt).getTime()
-                  : ((a.createdAt as { toDate?: () => Date })
-                      .toDate?.()
-                      .getTime() ?? 0)
-                : 0;
-              const dateB = b.createdAt
-                ? typeof b.createdAt === "string"
-                  ? new Date(b.createdAt).getTime()
-                  : ((b.createdAt as { toDate?: () => Date })
-                      .toDate?.()
-                      .getTime() ?? 0)
-                : 0;
-              return dateA - dateB; // Oldest patients display first, newer ones append after them
-            })
+            .sort(
+              (a, b) =>
+                parseTimestamp(a.createdAt) - parseTimestamp(b.createdAt),
+            )
             .map((patient) => (
               <div
                 key={patient.id}
@@ -298,17 +312,17 @@ export default function PatientsPage() {
             setLoadingRecords(false);
           }}
         >
-          <DialogContent className="w-[95vw] !max-w-5xl p-7 overflow-hidden">
+          <DialogContent className="w-[95vw] !max-w-5xl p-4 md:p-7 overflow-hidden">
             <DialogHeader className="sr-only">
               <DialogTitle>Patient Record</DialogTitle>
               <DialogDescription>
                 Full details for {selectedPatient.fullName}
               </DialogDescription>
             </DialogHeader>
-            <div className="flex h-[85vh]">
+            <div className="flex flex-col md:flex-row h-[85vh]">
               {/* Left — 40% */}
-              <div className="w-[40%] flex flex-col items-center justify-start pt-8 px-6 shrink-0">
-                <div className="relative w-full h-72 rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-700">
+              <div className="w-full md:w-[40%] flex flex-col items-center justify-start pt-4 md:pt-8 px-4 md:px-6 shrink-0 border-b md:border-b-0 md:border-r border-border pb-4 md:pb-0">
+                <div className="relative w-32 h-32 md:w-full md:h-72 rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-700">
                   {selectedPatient.photo ? (
                     <Image
                       src={selectedPatient.photo}
@@ -338,11 +352,6 @@ export default function PatientsPage() {
                     {selectedPatient.patientStatus}
                   </span>
                 </div>
-
-                {/* Print button */}
-                {/* <div className="w-full mt-6">
-                  <PrintPatientRecord patient={selectedPatient} />
-                </div> */}
               </div>
 
               {/* Right — 60% scrollable */}
@@ -366,7 +375,11 @@ export default function PatientsPage() {
                   />
                   <Row
                     label="Address"
-                    value={`${selectedPatient.address}, ${selectedPatient.city}, ${selectedPatient.state} ${selectedPatient.zip}`}
+                    value={`${selectedPatient.address}, ${selectedPatient.city}, ${selectedPatient.state}`}
+                  />
+                  <Row
+                    label="Hospital Card Number"
+                    value={selectedPatient.cardNumber || "N/A"}
                   />
                   <Row
                     label="Allergies"
@@ -380,6 +393,12 @@ export default function PatientsPage() {
                     label="Pre-existing Conditions"
                     value={selectedPatient.conditions || "None"}
                   />
+                  {selectedPatient.patientHistory && (
+                    <Row
+                      label="Patient History"
+                      value={selectedPatient.patientHistory}
+                    />
+                  )}
                   {selectedPatient.observations && (
                     <Row
                       label="Observations"
@@ -457,8 +476,29 @@ export default function PatientsPage() {
                           <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                             {record.content}
                           </p>
+                          {record.attachments && record.attachments.length > 0 && (
+                            <div className="mt-3 border-t border-gray-200 pt-3 dark:border-border">
+                              <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Additional Files
+                              </p>
+                              <div className="space-y-1">
+                                {record.attachments.map((attachment) => (
+                                  <a
+                                    key={attachment.url}
+                                    href={attachment.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center gap-2 text-xs text-blue-600 hover:underline dark:text-blue-400"
+                                  >
+                                    <span className="truncate">{attachment.name}</span>
+                                    <span className="shrink-0">Download</span>
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           <p className="text-xs text-gray-400 mt-2">
-                            {new Date(record.createdAt).toLocaleDateString(
+                            {formatDate(record.createdAt).toLocaleDateString(
                               "en-US",
                               {
                                 weekday: "short",
@@ -468,7 +508,7 @@ export default function PatientsPage() {
                               },
                             )}{" "}
                             at{" "}
-                            {new Date(record.createdAt).toLocaleTimeString(
+                            {formatDate(record.createdAt).toLocaleTimeString(
                               "en-US",
                               {
                                 hour: "2-digit",

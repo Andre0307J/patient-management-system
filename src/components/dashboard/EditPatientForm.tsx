@@ -50,12 +50,13 @@ export default function EditPatientForm({
   const [address, setAddress] = useState(patient.address);
   const [city, setCity] = useState(patient.city);
   const [state, setState] = useState(patient.state);
-  const [zip, setZip] = useState(patient.zip);
+  const cardNumber = patient.cardNumber;
   const [nationality, setNationality] = useState(patient.nationality);
   const [bloodType, setBloodType] = useState(patient.bloodType);
   const [allergies, setAllergies] = useState(patient.allergies);
   const [medications, setMedications] = useState(patient.medications);
   const [conditions, setConditions] = useState(patient.conditions);
+  const [patientHistory, setPatientHistory] = useState(patient.patientHistory);
   const [observations, setObservations] = useState(patient.observations);
 
   // Step 2
@@ -93,7 +94,6 @@ export default function EditPatientForm({
       if (!address.trim()) newErrors.address = "Address is required.";
       if (!city.trim()) newErrors.city = "City is required.";
       if (!state.trim()) newErrors.state = "State is required.";
-      if (!zip.trim()) newErrors.zip = "ZIP code is required.";
     }
 
     if (step === 1) {
@@ -180,12 +180,13 @@ export default function EditPatientForm({
         address,
         city,
         state,
-        zip,
+        cardNumber,
         nationality,
         bloodType,
         allergies,
         medications,
         conditions,
+        patientHistory,
         emergencyName,
         emergencyPhone,
         emergencyRelationship,
@@ -418,19 +419,12 @@ export default function EditPatientForm({
                 )}
               </div>
               <div className="space-y-1">
-                <Label>ZIP Code</Label>
+                <Label>Card Number</Label>
                 <Input
-                  placeholder="10001"
-                  value={zip}
-                  onChange={(e) => {
-                    setZip(e.target.value);
-                    if (e.target.value.trim())
-                      setErrors((p) => ({ ...p, zip: undefined! }));
-                  }}
+                  value={cardNumber}
+                  readOnly
+                  className="bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed font-mono tracking-widest"
                 />
-                {errors.zip && (
-                  <p className="text-red-500 text-xs">{errors.zip}</p>
-                )}
               </div>
               <div className="space-y-1">
                 <Label>Nationality</Label>
@@ -488,6 +482,19 @@ export default function EditPatientForm({
                   placeholder="e.g. Diabetes, Hypertension"
                   value={conditions}
                   onChange={(e) => setConditions(e.target.value)}
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label>
+                  Patient Medical History{" "}
+                  <span className="text-gray-400 text-xs">(optional)</span>
+                </Label>
+                <textarea
+                  placeholder="e.g. Previous surgeries, chronic conditions, or relevant medical history..."
+                  value={patientHistory}
+                  onChange={(e) => setPatientHistory(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
               <div className="col-span-2 space-y-1">

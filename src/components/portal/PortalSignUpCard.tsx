@@ -6,7 +6,7 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, runTransaction } from "firebase/firestore";
+import { doc, getDoc, runTransaction } from "firebase/firestore";
 import {
   Card,
   CardContent,
@@ -97,6 +97,7 @@ export default function PortalSignUpCard() {
       try {
         // Step 2 — Direct Point Lookup in the top-level 'InviteCodes' collection
         const codeRef = doc(portalDb, "InviteCodes", formattedCode);
+        let targetHospitalId = "";
 
         // Step 3 — Execute Atomic Transaction
         await runTransaction(portalDb, async (transaction) => {
@@ -116,7 +117,7 @@ export default function PortalSignUpCard() {
             throw new Error("This invite code has expired.");
           }
 
-          const targetHospitalId = codeData.hospitalId;
+          targetHospitalId = codeData.hospitalId;
           const role = codeData.role as "doctor" | "nurse";
 
           // Dynamic multi-tenant reference mapping
@@ -153,6 +154,18 @@ export default function PortalSignUpCard() {
             createdAt: new Date().toISOString(),
           });
         });
+
+        const hospitalSnap = await getDoc(
+          doc(portalDb, "Hospitals", targetHospitalId),
+        );
+        const hospitalData = hospitalSnap.exists() ? hospitalSnap.data() : {};
+        window.localStorage.setItem(
+          "patientcare-portal-hospital-branding",
+          JSON.stringify({
+            hospitalName: hospitalData.hospitalName || targetHospitalId,
+            logoURL: hospitalData.logoURL || null,
+          }),
+        );
 
         // Step 4 — Send verification email with Auto-Close link for Tab 2
         await sendEmailVerification(user, {

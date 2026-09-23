@@ -26,6 +26,19 @@ export function usePortalAuth() {
         return;
       }
 
+      // DO NOT run staff portal access checks if the user is currently on Admin routes!
+      const isAdminRoute =
+        window.location.pathname === "/" ||
+        window.location.pathname.startsWith("/sign-up") ||
+        window.location.pathname.startsWith("/admin") ||
+        window.location.pathname.startsWith("/verification-sent");
+
+      if (isAdminRoute) {
+        setLoading(false);
+        isEvaluating.current = false;
+        return;
+      }
+
       const publicPaths = [
         "/portal",
         "/portal/signup",

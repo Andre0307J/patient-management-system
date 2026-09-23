@@ -6,25 +6,30 @@ import { Patient, ClinicalRecord } from "@/context/PatientContext";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useHospital } from "@/context/HospitalContext";
 
 // 1. Accept clinicalRecords as a prop from the parent
-export default function PrintPatientRecord({ 
+export default function PrintPatientRecord({
   patient,
-  clinicalRecords = [] 
-}: { 
+  clinicalRecords = [],
+}: {
   patient: Patient;
   clinicalRecords?: ClinicalRecord[];
 }) {
   const printRef = useRef<HTMLDivElement>(null);
   const { country } = useCurrency();
+  const { hospitalName, logoURL } = useHospital();
   const [observations, setObservations] = useState(patient.observations || "");
 
   const handlePrint = () => {
-    const printContents = printRef.current?.innerHTML;
-    if (!printContents) return;
+    const printNode = printRef.current;
+    if (!printNode) return;
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+
+    const printClone = printNode.cloneNode(true) as HTMLElement;
+    printClone.style.display = "block";
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -64,9 +69,11 @@ export default function PrintPatientRecord({
             @media print { body { padding: 20px; } }
           </style>
         </head>
-        <body>${printContents}</body>
+        <body></body>
       </html>
     `);
+
+    printWindow.document.body.appendChild(printClone);
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => {
@@ -76,7 +83,9 @@ export default function PrintPatientRecord({
   };
 
   const today = new Date().toLocaleDateString("en-US", {
-    year: "numeric", month: "long", day: "numeric",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 
   return (
@@ -92,21 +101,47 @@ export default function PrintPatientRecord({
         />
       </div>
 
-      <Button onClick={handlePrint} className="gap-2 w-full cursor-pointer" variant="outline">
+      <Button
+        onClick={handlePrint}
+        className="gap-2 w-full cursor-pointer"
+        variant="outline"
+      >
         <Printer size={15} /> Print Patient Record
       </Button>
 
       {/* Hidden printable content */}
       <div ref={printRef} style={{ display: "none" }}>
         <div className="header">
-          <div>
-            <h1>PatientCare</h1>
-            <p>Patient Medical Record</p>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {logoURL ? (
+              <Image
+                src={logoURL}
+                alt={hospitalName}
+                width={48}
+                height={48}
+                className="h-12 w-12 object-contain"
+                priority
+              />
+            ) : null}
+            <div>
+              <h1 style={{ color: "#1d4ed8", fontSize: "22px", fontWeight: "bold" }}>
+                {hospitalName}
+              </h1>
+              <p style={{ color: "#6b7280", fontSize: "12px" }}>
+                Patient Medical Record
+              </p>
+            </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <p style={{ fontSize: "12px", color: "#6b7280" }}>Date Printed: {today}</p>
-            <p style={{ fontSize: "12px", color: "#6b7280" }}>Country: {country}</p>
-            <p style={{ fontSize: "12px", color: "#6b7280" }}>Record ID: {patient.id}</p>
+            <p style={{ fontSize: "12px", color: "#6b7280" }}>
+              Date Printed: {today}
+            </p>
+            <p style={{ fontSize: "12px", color: "#6b7280" }}>
+              Country: {country}
+            </p>
+            <p style={{ fontSize: "12px", color: "#6b7280" }}>
+              Record ID: {patient.id}
+            </p>
           </div>
         </div>
 
@@ -129,7 +164,9 @@ export default function PrintPatientRecord({
           <div>
             <h2>{patient.fullName}</h2>
             <p>{patient.id}</p>
-            <p>{patient.email} · {patient.phone}</p>
+            <p>
+              {patient.email} · {patient.phone}
+            </p>
             <span className={`badge ${patient.patientStatus}`}>
               {patient.patientStatus}
             </span>
@@ -140,14 +177,46 @@ export default function PrintPatientRecord({
         <div className="section">
           <div className="section-title">Basic Information</div>
           <div className="grid">
-            <div className="row"><span className="label">Date of Birth</span><span className="value">{patient.dob}</span></div>
-            <div className="row"><span className="label">Gender</span><span className="value">{patient.gender}</span></div>
-            <div className="row"><span className="label">Nationality</span><span className="value">{patient.nationality || "N/A"}</span></div>
-            <div className="row"><span className="label">Blood Type</span><span className="value">{patient.bloodType || "N/A"}</span></div>
-            <div className="row" style={{ gridColumn: "span 2" }}><span className="label">Address</span><span className="value">{patient.address}, {patient.city}, {patient.state} {patient.zip}</span></div>
-            <div className="row" style={{ gridColumn: "span 2" }}><span className="label">Allergies</span><span className="value">{patient.allergies || "None"}</span></div>
-            <div className="row" style={{ gridColumn: "span 2" }}><span className="label">Current Medications</span><span className="value">{patient.medications || "None"}</span></div>
-            <div className="row" style={{ gridColumn: "span 2" }}><span className="label">Pre-existing Conditions</span><span className="value">{patient.conditions || "None"}</span></div>
+            <div className="row">
+              <span className="label">Date of Birth</span>
+              <span className="value">{patient.dob}</span>
+            </div>
+            <div className="row">
+              <span className="label">Gender</span>
+              <span className="value">{patient.gender}</span>
+            </div>
+            <div className="row">
+              <span className="label">Nationality</span>
+              <span className="value">{patient.nationality || "N/A"}</span>
+            </div>
+            <div className="row">
+              <span className="label">Blood Type</span>
+              <span className="value">{patient.bloodType || "N/A"}</span>
+            </div>
+            <div className="row" style={{ gridColumn: "span 2" }}>
+              <span className="label">Address</span>
+              <span className="value">
+                {patient.address}, {patient.city}, {patient.state}
+              </span>
+            </div>
+            <div className="row" style={{ gridColumn: "span 2" }}>
+              <span className="label">Card Number</span>
+              <span className="value">
+                {patient.cardNumber}
+              </span>
+            </div>
+            <div className="row" style={{ gridColumn: "span 2" }}>
+              <span className="label">Allergies</span>
+              <span className="value">{patient.allergies || "None"}</span>
+            </div>
+            <div className="row" style={{ gridColumn: "span 2" }}>
+              <span className="label">Current Medications</span>
+              <span className="value">{patient.medications || "None"}</span>
+            </div>
+            <div className="row" style={{ gridColumn: "span 2" }}>
+              <span className="label">Pre-existing Conditions</span>
+              <span className="value">{patient.conditions || "None"}</span>
+            </div>
           </div>
         </div>
 
@@ -155,9 +224,18 @@ export default function PrintPatientRecord({
         <div className="section">
           <div className="section-title">Emergency Contact</div>
           <div className="grid">
-            <div className="row"><span className="label">Name</span><span className="value">{patient.emergencyName}</span></div>
-            <div className="row"><span className="label">Phone</span><span className="value">{patient.emergencyPhone}</span></div>
-            <div className="row" style={{ gridColumn: "span 2" }}><span className="label">Relationship</span><span className="value">{patient.emergencyRelationship}</span></div>
+            <div className="row">
+              <span className="label">Name</span>
+              <span className="value">{patient.emergencyName}</span>
+            </div>
+            <div className="row">
+              <span className="label">Phone</span>
+              <span className="value">{patient.emergencyPhone}</span>
+            </div>
+            <div className="row" style={{ gridColumn: "span 2" }}>
+              <span className="label">Relationship</span>
+              <span className="value">{patient.emergencyRelationship}</span>
+            </div>
           </div>
         </div>
 
@@ -165,10 +243,24 @@ export default function PrintPatientRecord({
         <div className="section">
           <div className="section-title">Insurance & Admin</div>
           <div className="grid">
-            <div className="row"><span className="label">Insurance Provider</span><span className="value">{patient.insuranceProvider || "N/A"}</span></div>
-            <div className="row"><span className="label">Policy Number</span><span className="value">{patient.insurancePolicy || "N/A"}</span></div>
-            <div className="row"><span className="label">Assigned Doctor</span><span className="value">{patient.assignedDoctor || "N/A"}</span></div>
-            <div className="row"><span className="label">Patient Status</span><span className="value">{patient.patientStatus}</span></div>
+            <div className="row">
+              <span className="label">Insurance Provider</span>
+              <span className="value">
+                {patient.insuranceProvider || "N/A"}
+              </span>
+            </div>
+            <div className="row">
+              <span className="label">Policy Number</span>
+              <span className="value">{patient.insurancePolicy || "N/A"}</span>
+            </div>
+            <div className="row">
+              <span className="label">Assigned Doctor</span>
+              <span className="value">{patient.assignedDoctor || "N/A"}</span>
+            </div>
+            <div className="row">
+              <span className="label">Patient Status</span>
+              <span className="value">{patient.patientStatus}</span>
+            </div>
           </div>
         </div>
 
@@ -190,7 +282,8 @@ export default function PrintPatientRecord({
                   <div className="clinical-record-header">
                     <span className="clinical-record-type">{record.type}</span>
                     <span>
-                      {new Date(record.createdAt).toLocaleDateString()} by {record.addedByName} ({record.addedByRole})
+                      {new Date(record.createdAt).toLocaleDateString()} by{" "}
+                      {record.addedByName} ({record.addedByRole})
                     </span>
                   </div>
                   <p className="clinical-record-content">{record.content}</p>
@@ -202,7 +295,7 @@ export default function PrintPatientRecord({
 
         {/* Footer */}
         <div className="footer">
-          <span>Generated by PatientCare System</span>
+          <span>Generated by ${hospitalName}</span>
           <span>This document is confidential and for medical use only.</span>
         </div>
       </div>

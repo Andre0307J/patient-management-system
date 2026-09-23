@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePortal } from "@/context/PortalContext";
-import { ClinicalRecord } from "@/context/PatientContext";
-import { portalDb } from "@/config/firebase";
+import { ClinicalAttachment, ClinicalRecord } from "@/context/PatientContext";
+import { portalDb, portalStorage } from "@/config/firebase";
 import { collection, onSnapshot, FirestoreError } from "firebase/firestore";
+import { uploadImage } from "@/lib/uploadImages";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,7 +17,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserCircle, ArrowLeft, Plus, Loader2 } from "lucide-react";
+import {
+  UserCircle,
+  ArrowLeft,
+  Plus,
+  Loader2,
+  Paperclip,
+  X,
+  FileText,
+  Download,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -54,11 +64,33 @@ export default function PortalPatientPage() {
   const [openAddRecord, setOpenAddRecord] = useState(false);
 
   // Derived Initial State — Computes correctly on mount without cascading renders
-  const [recordType, setRecordType] = useState<ClinicalRecord["type"]>(() => 
-    portalUser?.role === "nurse" ? "prescription" : "examination"
+  const [recordType, setRecordType] = useState<ClinicalRecord["type"]>(() =>
+    portalUser?.role === "nurse" ? "prescription" : "examination",
   );
   const [content, setContent] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const maxFileSize = 10 * 1024 * 1024;
+  const maxAttachments = 5;
+
+  const handleFileSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    const availableSlots = maxAttachments - attachments.length;
+    const validFiles = selectedFiles.slice(0, availableSlots).filter((file) => {
+      if (file.size > maxFileSize) {
+        toast.error(`${file.name} is larger than 10 MB.`);
+        return false;
+      }
+      return true;
+    });
+
+    if (selectedFiles.length > availableSlots) {
+      toast.error(`You can attach up to ${maxAttachments} files.`);
+    }
+    setAttachments((current) => [...current, ...validFiles]);
+    e.target.value = "";
+  };
 
   // Load clinical records
   useEffect(() => {
@@ -101,13 +133,27 @@ export default function PortalPatientPage() {
 
     setIsSubmitting(true);
     try {
+      const uploadedAttachments: ClinicalAttachment[] = await Promise.all(
+        attachments.map(async (file) => {
+          const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const url = await uploadImage(
+            file,
+            `Hospitals/${portalUser?.hospitalId}/patients/${id}/clinical-records/${Date.now()}-${safeFileName}`,
+            portalStorage,
+          );
+          return { name: file.name, url, type: file.type, size: file.size };
+        }),
+      );
+
       await addClinicalRecord(id as string, {
         type: recordType,
         content,
         patientId: id as string,
+        attachments: uploadedAttachments,
       });
       toast.success("Clinical record added successfully.");
       setContent("");
+      setAttachments([]);
       setOpenAddRecord(false);
     } catch (error) {
       toast.error("Failed to add clinical record.");
@@ -154,8 +200,8 @@ export default function PortalPatientPage() {
       </button>
 
       {/* Patient Header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center gap-4">
+      <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-border p-4 md:p-6">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
           <div className="relative w-16 h-16 rounded-full overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
             {patient.photo ? (
               <Image
@@ -190,7 +236,7 @@ export default function PortalPatientPage() {
         </div>
 
         {/* Basic medical info */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-border">
           <div>
             <p className="text-xs text-gray-400">Allergies</p>
             <p className="text-sm text-gray-700">
@@ -215,6 +261,12 @@ export default function PortalPatientPage() {
               <p className="text-sm text-gray-700">{patient.observations}</p>
             </div>
           )}
+          {patient.patientHistory && (
+            <div className="col-span-2 sm:col-span-3">
+              <p className="text-xs text-gray-400">Patient Medical History</p>
+              <p className="text-sm text-gray-700">{patient.patientHistory}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -226,7 +278,9 @@ export default function PortalPatientPage() {
           </h2>
           <Button
             onClick={() => {
-              setRecordType(portalUser?.role === "nurse" ? "prescription" : "examination");
+              setRecordType(
+                portalUser?.role === "nurse" ? "prescription" : "examination",
+              );
               setOpenAddRecord(true);
             }}
             className="gap-2 bg-teal-600 hover:bg-teal-700"
@@ -277,6 +331,28 @@ export default function PortalPatientPage() {
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
                       {record.content}
                     </p>
+                    {record.attachments && record.attachments.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-xs font-medium text-gray-500 mb-2">
+                          Additional Files
+                        </p>
+                        <div className="space-y-1">
+                          {record.attachments.map((attachment) => (
+                            <a
+                              key={attachment.url}
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-2 text-xs text-teal-600 hover:underline"
+                            >
+                              <FileText size={14} />
+                              <span className="truncate">{attachment.name}</span>
+                              <Download size={13} className="shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
@@ -299,7 +375,15 @@ export default function PortalPatientPage() {
       </div>
 
       {/* Add Clinical Record Dialog */}
-      <Dialog open={openAddRecord} onOpenChange={setOpenAddRecord}>
+      <Dialog
+        open={openAddRecord}
+        onOpenChange={(open) => {
+          setOpenAddRecord(open);
+          if (!open) {
+            setAttachments([]);
+          }
+        }}
+      >
         <DialogContent className="w-[90vw] !max-w-lg">
           <DialogHeader>
             <DialogTitle>
@@ -364,6 +448,49 @@ export default function PortalPatientPage() {
                 rows={6}
                 className="w-full px-3 py-2 text-sm rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clinical-files">Additional Files</Label>
+              <label
+                htmlFor="clinical-files"
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-3 text-sm text-gray-500 hover:border-teal-500 hover:text-teal-600"
+              >
+                <Paperclip size={16} />
+                Attach files
+              </label>
+              <input
+                id="clinical-files"
+                type="file"
+                multiple
+                onChange={handleFileSelection}
+                className="sr-only"
+              />
+              {attachments.length > 0 && (
+                <div className="space-y-1">
+                  {attachments.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between gap-2 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600"
+                    >
+                      <span className="truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttachments((current) =>
+                            current.filter((_, fileIndex) => fileIndex !== index),
+                          )
+                        }
+                        className="shrink-0 text-gray-400 hover:text-red-500"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-gray-400">Up to 5 files, 10 MB each.</p>
             </div>
 
             <div className="flex justify-end gap-3">

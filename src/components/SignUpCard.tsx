@@ -3,8 +3,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
+import { Eye, EyeOff, Building2, Upload } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -16,43 +15,46 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useCurrency, countryCurrencyMap } from "@/context/CurrencyContext";
-import { auth, db } from "@/config/firebase";
+import { auth, db, storage } from "@/config/firebase";
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import Image from "next/image";
 
 export default function SignUpCard() {
-  const [language, setLanguage] = useState(() => {
-    if (typeof window === "undefined") return "english";
-    const browserLang = navigator.language.slice(0, 2).toLowerCase();
-    const langMap: Record<string, string> = {
-      en: "english",
-      es: "spanish",
-      fr: "french",
-      ar: "arabic",
-      pt: "portuguese",
-    };
-    return langMap[browserLang] || "english";
-  });
+  const [hospitalName, setHospitalName] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{
+    hospitalName?: string;
     fullName?: string;
     email?: string;
     password?: string;
   }>({});
-  const [isLoading, setIsLoading] = useState(false);
 
   const { country, setCountry } = useCurrency();
+  const router = useRouter();
 
-  const validateEmail = (email: string) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validateEmail = (email: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
   };
 
   const getFirebaseErrorMessage = (error: {
@@ -64,7 +66,6 @@ export default function SignUpCard() {
       "auth/invalid-email": "Please enter a valid email address.",
       "auth/weak-password": "Password must be at least 6 characters.",
       "auth/operation-not-allowed": "Sign up is currently disabled.",
-      "auth/popup-closed-by-user": "Sign up was cancelled.",
       "auth/network-request-failed":
         "Network error. Please check your connection.",
     };
@@ -76,83 +77,103 @@ export default function SignUpCard() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    const newErrors: { fullName?: string; email?: string; password?: string } =
-      {};
+  const newErrors: typeof errors = {};
+  if (!hospitalName.trim()) newErrors.hospitalName = "Hospital name is required.";
+  if (!fullName.trim()) newErrors.fullName = "Full name is required.";
+  if (!validateEmail(email)) newErrors.email = "Please enter a valid email address.";
+  if (password.length < 6) {
+    newErrors.password = "Password must be at least 6 characters.";
+  } else if (password !== confirmPassword) {
+    newErrors.password = "Passwords do not match.";
+  }
 
-    if (!fullName.trim()) {
-      newErrors.fullName = "Full name is required.";
-    }
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
 
-    if (!validateEmail(email)) {
-      newErrors.email = "Please enter a valid email address.";
-    }
+  setIsLoading(true);
 
-    if (password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters.";
-    } else if (password !== confirmPassword) {
-      newErrors.password = "Passwords do not match.";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    setIsLoading(true);
+  try {
+    // Step 1 — Create Firebase Auth account FIRST
+    // so the user is authenticated when querying Firestore
+    const userCredentials = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredentials.user;
 
     try {
-      // Create user in Firebase Auth
-      const userCredentials = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password,
-      );
-      const user = userCredentials.user;
-
-      try {
-        // Step 2: Create profile in Firestore.
-        await setDoc(doc(db, "Hospitals", user.uid), {
-          fullName,
-          email: email.toLowerCase(),
-          country,
-          language,
-          createdAt: new Date().toISOString(),
-        });
-      } catch (firestoreError) {
-        // Rollback
+      // Step 2 — Check if hospital name already exists (user is now authenticated)
+      const hospitalDocSnap = await getDoc(doc(db, "Hospitals", hospitalName.trim()));
+      if (hospitalDocSnap.exists()) {
+        // Rollback — delete auth account if hospital name is taken
         await user.delete();
-        throw firestoreError;
+        setErrors({ hospitalName: "A hospital with this name already exists." });
+        setIsLoading(false);
+        return;
       }
 
-      // Step 3: Send verification email with custom ActionCodeSettings
-      try {
-        await sendEmailVerification(user, {
-          url: `${window.location.origin}/verify-success`, // <-- Changed destination route
-          handleCodeInApp: true, // <-- Dictates custom URL routing behavior
-        });
-        toast.success(
-          "Account created! Please check your email for verification.",
+      // Step 3 — Upload logo to Firebase Storage if provided
+      let logoURL: string | null = null;
+      if (logoFile) {
+        const storageRef = ref(
+          storage,
+          `hospitals/${hospitalName.trim()}/logo/${logoFile.name}`
         );
-      } catch (emailError) {
-        console.error("Verification email failed:", emailError);
-        toast.error(
-          "Account created, but the verification email failed. You can resend it from the next page.",
-        );
+        await uploadBytes(storageRef, logoFile);
+        logoURL = await getDownloadURL(storageRef);
       }
 
-      // Redirect to verification pending page
-      window.location.href = "/admin/verification-sent";
-    } catch (error: unknown) {
-      const firebaseError = error as { code: string; message?: string };
-      const errorMessage = getFirebaseErrorMessage(firebaseError);
-      setErrors({ email: errorMessage });
-      console.error("Sign-up error:", firebaseError.message || error);
-    } finally {
-      setIsLoading(false);
+      // Step 4 — Create Hospitals document (document ID = hospital name)
+      await setDoc(doc(db, "Hospitals", hospitalName.trim()), {
+        hospitalName: hospitalName.trim(),
+        logoURL,
+        uid: user.uid,
+        fullName,
+        email: email.toLowerCase(),
+        country,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Step 5 — Create HospitalIndex for uid → hospitalName lookup
+      // This is the ONLY index needed for admins
+      // NOTE: Do NOT create PortalUserIndex for admins — that is exclusively
+      // for doctors and nurses who sign up via the portal invite code system
+      await setDoc(doc(db, "HospitalIndex", user.uid), {
+        hospitalName: hospitalName.trim(),
+        createdAt: new Date().toISOString(),
+      });
+
+      window.localStorage.setItem(
+        "patientcare-hospital-branding",
+        JSON.stringify({ hospitalName: hospitalName.trim(), logoURL }),
+      );
+
+      // Step 6 — Send verification email
+      await sendEmailVerification(user, {
+        url: `${window.location.origin}/admin`,
+      });
+
+      toast.success("Account created!", {
+        description: "Please check your email to verify your account.",
+      });
+
+      router.push("/admin/verification-sent");
+
+    } catch (firestoreError) {
+      // Rollback — delete auth account if Firestore writes fail
+      await user.delete();
+      throw firestoreError;
     }
-  };
+  } catch (error: unknown) {
+    const firebaseError = error as { code: string; message?: string };
+    const errorMessage = getFirebaseErrorMessage(firebaseError);
+    setErrors({ email: errorMessage });
+    console.error("Sign-up error:", firebaseError.message || error);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <Card className="w-full max-w-md shadow-lg">
@@ -164,6 +185,69 @@ export default function SignUpCard() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          {/* Hospital Name */}
+          <div className="space-y-2">
+            <Label htmlFor="hospitalName">Hospital Name</Label>
+            <div className="relative">
+              <Building2
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <Input
+                id="hospitalName"
+                type="text"
+                placeholder="St. Mary Hospital"
+                value={hospitalName}
+                className="pl-9"
+                onChange={(e) => {
+                  setHospitalName(e.target.value);
+                  if (e.target.value.trim())
+                    setErrors((p) => ({ ...p, hospitalName: undefined }));
+                }}
+              />
+            </div>
+            {errors.hospitalName && (
+              <p className="text-red-500 text-xs">{errors.hospitalName}</p>
+            )}
+          </div>
+
+          {/* Upload Logo */}
+          <div className="space-y-2">
+            <Label>
+              Hospital Logo{" "}
+              <span className="text-gray-400 text-xs">(optional)</span>
+            </Label>
+            <div className="flex items-center gap-3">
+              {logoPreview ? (
+                <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 shrink-0">
+                  <Image
+                    src={logoPreview}
+                    alt="Logo preview"
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center shrink-0">
+                  <Upload size={18} className="text-gray-400" />
+                </div>
+              )}
+              <label className="flex-1 cursor-pointer">
+                <div className="h-9 px-3 rounded-md border border-gray-200 bg-gray-50 flex items-center text-sm text-gray-500 hover:bg-gray-100 transition">
+                  {logoFile ? logoFile.name : "Choose logo image..."}
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleLogoChange}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Full Name */}
           <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
             <Input
@@ -173,9 +257,8 @@ export default function SignUpCard() {
               value={fullName}
               onChange={(e) => {
                 setFullName(e.target.value);
-                if (e.target.value.trim()) {
-                  setErrors((prev) => ({ ...prev, fullName: undefined }));
-                }
+                if (e.target.value.trim())
+                  setErrors((p) => ({ ...p, fullName: undefined }));
               }}
             />
             {errors.fullName && (
@@ -183,6 +266,7 @@ export default function SignUpCard() {
             )}
           </div>
 
+          {/* Email */}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -192,9 +276,8 @@ export default function SignUpCard() {
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
-                if (validateEmail(e.target.value)) {
-                  setErrors((prev) => ({ ...prev, email: undefined }));
-                }
+                if (validateEmail(e.target.value))
+                  setErrors((p) => ({ ...p, email: undefined }));
               }}
             />
             {errors.email && (
@@ -202,6 +285,7 @@ export default function SignUpCard() {
             )}
           </div>
 
+          {/* Password */}
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <div className="relative">
@@ -213,14 +297,13 @@ export default function SignUpCard() {
                 className="pr-10"
                 onChange={(e) => {
                   setPassword(e.target.value);
-                  if (confirmPassword && e.target.value === confirmPassword) {
-                    setErrors((prev) => ({ ...prev, password: undefined }));
-                  }
+                  if (confirmPassword && e.target.value === confirmPassword)
+                    setErrors((p) => ({ ...p, password: undefined }));
                 }}
               />
               <button
                 type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
+                onClick={() => setShowPassword((p) => !p)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -228,6 +311,7 @@ export default function SignUpCard() {
             </div>
           </div>
 
+          {/* Confirm Password */}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm Password</Label>
             <div className="relative">
@@ -239,14 +323,13 @@ export default function SignUpCard() {
                 className="pr-10"
                 onChange={(e) => {
                   setConfirmPassword(e.target.value);
-                  if (e.target.value === password) {
-                    setErrors((prev) => ({ ...prev, password: undefined }));
-                  }
+                  if (e.target.value === password)
+                    setErrors((p) => ({ ...p, password: undefined }));
                 }}
               />
               <button
                 type="button"
-                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                onClick={() => setShowConfirmPassword((p) => !p)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -257,31 +340,10 @@ export default function SignUpCard() {
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="language">Preferred Language</Label>
-            <select
-              name="languages"
-              id="language"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="english">English</option>
-              <option value="spanish">Spanish</option>
-              <option value="french">French</option>
-              <option value="arabic">Arabic</option>
-              <option value="portuguese">Portuguese</option>
-            </select>
-            <p className="text-xs text-gray-400">
-              Auto-detected from your browser. You can change this anytime in
-              Settings.
-            </p>
-          </div>
-
+          {/* Country */}
           <div className="space-y-2">
             <Label htmlFor="country">Country</Label>
             <select
-              name="country"
               id="country"
               value={country}
               onChange={(e) => setCountry(e.target.value)}
@@ -289,7 +351,7 @@ export default function SignUpCard() {
             >
               {countryCurrencyMap.map((c) => (
                 <option key={c.country} value={c.country}>
-                  {c.country}
+                  {c.country} ({c.code})
                 </option>
               ))}
             </select>
@@ -300,7 +362,7 @@ export default function SignUpCard() {
 
           <Button
             type="submit"
-            className="w-full cursor-pointer hover:bg-primary/90"
+            className="w-full cursor-pointer"
             disabled={isLoading}
           >
             {isLoading ? "Creating Account..." : "Create Account"}

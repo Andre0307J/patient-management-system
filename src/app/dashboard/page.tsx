@@ -234,7 +234,7 @@ export default function DashboardPage() {
           {patients.length === 0 ? (
             <EmptyChart />
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={180}>
               <LineChart data={patientsOverTime}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />

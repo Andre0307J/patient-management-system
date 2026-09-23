@@ -21,11 +21,16 @@ import { Patient, ClinicalRecord, PortalUser } from "@/context/PatientContext";
 
 interface PortalContextType {
   portalUser: PortalUser | null;
+  hospitalName: string;
+  hospitalLogoURL: string | null;
   assignedPatients: Patient[];
   loading: boolean;
   addClinicalRecord: (
     patientId: string,
-    record: Omit<ClinicalRecord, "id" | "addedBy" | "addedByName" | "addedByRole" | "createdAt">
+    record: Omit<
+      ClinicalRecord,
+      "id" | "addedBy" | "addedByName" | "addedByRole" | "createdAt"
+    >,
   ) => Promise<void>;
 }
 
@@ -35,6 +40,8 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const { user } = usePortalAuth();
   const [portalUser, setPortalUser] = useState<PortalUser | null>(null);
   const [assignedPatients, setAssignedPatients] = useState<Patient[]>([]);
+  const [hospitalName, setHospitalName] = useState<string>("");
+  const [hospitalLogoURL, setHospitalLogoURL] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,12 +61,23 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       try {
         setLoading(true);
 
-        const lookupSnap = await getDoc(doc(portalDb, "PortalUserIndex", user.uid));
+        const lookupSnap = await getDoc(
+          doc(portalDb, "PortalUserIndex", user.uid),
+        );
         if (!lookupSnap.exists()) {
           setLoading(false);
           return;
         }
         const { hospitalId } = lookupSnap.data();
+
+        const hospitalSnap = await getDoc(
+          doc(portalDb, "Hospitals", hospitalId),
+        );
+        if (hospitalSnap.exists()) {
+          const data = hospitalSnap.data();
+          setHospitalName(data.hospitalName || hospitalId);
+          setHospitalLogoURL(data.logoURL || null);
+        }
 
         // Listen to portal user profile in real time
         unsubPortalUser = onSnapshot(
@@ -73,7 +91,10 @@ export function PortalProvider({ children }: { children: ReactNode }) {
               patientUnsubscribers.forEach((unsub) => unsub());
               patientUnsubscribers = [];
 
-              if (!data.assignedPatients || data.assignedPatients.length === 0) {
+              if (
+                !data.assignedPatients ||
+                data.assignedPatients.length === 0
+              ) {
                 setAssignedPatients([]);
                 setLoading(false);
                 return;
@@ -97,14 +118,19 @@ export function PortalProvider({ children }: { children: ReactNode }) {
                         return Array.from(baseMap.values());
                       });
                     } else {
-                      setAssignedPatients((prev) => prev.filter((p) => p.id !== patientId));
+                      setAssignedPatients((prev) =>
+                        prev.filter((p) => p.id !== patientId),
+                      );
                     }
                     setLoading(false);
                   },
                   (error: FirestoreError) => {
-                    console.error(`Patient ${patientId} listener error:`, error);
+                    console.error(
+                      `Patient ${patientId} listener error:`,
+                      error,
+                    );
                     setLoading(false);
-                  }
+                  },
                 );
                 patientUnsubscribers.push(unsub);
               });
@@ -116,7 +142,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
           (error: FirestoreError) => {
             console.error("Portal user listener error:", error);
             setLoading(false);
-          }
+          },
         );
       } catch (error) {
         console.error("Portal init error:", error);
@@ -134,23 +160,42 @@ export function PortalProvider({ children }: { children: ReactNode }) {
 
   const addClinicalRecord = async (
     patientId: string,
-    record: Omit<ClinicalRecord, "id" | "addedBy" | "addedByName" | "addedByRole" | "createdAt">
+    record: Omit<
+      ClinicalRecord,
+      "id" | "addedBy" | "addedByName" | "addedByRole" | "createdAt"
+    >,
   ) => {
     if (!user || !portalUser) return;
     await addDoc(
-      collection(portalDb, "Hospitals", portalUser.hospitalId, "patients", patientId, "clinicalRecords"),
+      collection(
+        portalDb,
+        "Hospitals",
+        portalUser.hospitalId,
+        "patients",
+        patientId,
+        "clinicalRecords",
+      ),
       {
         ...record,
         addedBy: user.uid,
         addedByName: portalUser.fullName,
         addedByRole: portalUser.role,
         createdAt: new Date().toISOString(),
-      }
+      },
     );
   };
 
   return (
-    <PortalContext.Provider value={{ portalUser, assignedPatients, loading, addClinicalRecord }}>
+    <PortalContext.Provider
+      value={{
+        portalUser,
+        assignedPatients,
+        loading,
+        addClinicalRecord,
+        hospitalName,
+        hospitalLogoURL,
+      }}
+    >
       {children}
     </PortalContext.Provider>
   );
@@ -158,6 +203,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
 
 export function usePortal() {
   const context = useContext(PortalContext);
-  if (!context) throw new Error("usePortal must be used within a PortalProvider");
+  if (!context)
+    throw new Error("usePortal must be used within a PortalProvider");
   return context;
 }

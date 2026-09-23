@@ -23,7 +23,11 @@ const firebaseConfig = {
 export const app =
   getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-export const db = getFirestore(app);
+// Use named database if NEXT_PUBLIC_FIREBASE_DB_ID is set,
+// otherwise fall back to the default database
+const dbId = process.env.NEXT_PUBLIC_FIREBASE_DB_ID;
+
+export const db = dbId ? getFirestore(app, dbId) : getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
@@ -34,7 +38,6 @@ export const portalApp =
   getApps().find((a) => a.name === PORTAL_APP_NAME) ??
   initializeApp(firebaseConfig, PORTAL_APP_NAME);
 
-// Safe Portal Auth initialization (Handles SSR & Next.js Hot Reloads)
 const getPortalAuth = () => {
   try {
     return getAuth(portalApp);
@@ -49,5 +52,5 @@ const getPortalAuth = () => {
 };
 
 export const portalAuth = getPortalAuth();
-export const portalDb = getFirestore(portalApp);
+export const portalDb = dbId ? getFirestore(portalApp, dbId) : getFirestore(portalApp);
 export const portalStorage = getStorage(portalApp);
